@@ -1,18 +1,22 @@
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { apikey } from "@/db/auth-schema";
-
 const WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const MAX_REQUESTS = 100;
 
-// WebSocket subscribers: keyId -> Set of ServerWebSocket
+interface UserUsage {
+  used: number;
+  windowStart: number;
+}
+
+// In-memory rate limit per userId
+const usageMap = new Map<string, UserUsage>();
+
+// WebSocket subscribers: userId -> Set of ServerWebSocket
 const subscribers = new Map<string, Set<any>>();
 
-export function subscribe(keyId: string, ws: any) {
-  if (!subscribers.has(keyId)) {
-    subscribers.set(keyId, new Set());
+export function subscribe(userId: string, ws: any) {
+  if (!subscribers.has(userId)) {
+    subscribers.set(userId, new Set());
   }
-  subscribers.get(keyId)!.add(ws);
+  subscribers.get(userId)!.add(ws);
 }
 
 export function unsubscribe(ws: any) {
@@ -21,8 +25,8 @@ export function unsubscribe(ws: any) {
   }
 }
 
-function broadcast(keyId: string, data: object) {
-  const sockets = subscribers.get(keyId);
+function broadcast(userId: string, data: object) {
+  const sockets = subscribers.get(userId);
   if (!sockets) return;
   const msg = JSON.stringify(data);
   for (const ws of sockets) {
@@ -34,79 +38,44 @@ function broadcast(keyId: string, data: object) {
   }
 }
 
-export async function incrementUsage(keyId: string): Promise<{
+function getOrResetUsage(userId: string): UserUsage {
+  const now = Date.now();
+  let entry = usageMap.get(userId);
+
+  if (!entry || now - entry.windowStart >= WINDOW_MS) {
+    entry = { used: 0, windowStart: now };
+    usageMap.set(userId, entry);
+  }
+
+  return entry;
+}
+
+export function incrementUsage(userId: string): {
   allowed: boolean;
   used: number;
   max: number;
   remaining: number;
-}> {
-  const [key] = await db
-    .select()
-    .from(apikey)
-    .where(eq(apikey.id, keyId))
-    .limit(1);
+} {
+  const entry = getOrResetUsage(userId);
 
-  if (!key || !key.enabled) {
-    return { allowed: false, used: 0, max: MAX_REQUESTS, remaining: 0 };
+  if (entry.used >= MAX_REQUESTS) {
+    broadcast(userId, { type: "usage", used: entry.used, max: MAX_REQUESTS, remaining: 0 });
+    return { allowed: false, used: entry.used, max: MAX_REQUESTS, remaining: 0 };
   }
 
-  const now = new Date();
-  const max = key.rateLimitMax ?? MAX_REQUESTS;
-  let remaining = key.remaining ?? max;
-  let requestCount = key.requestCount ?? 0;
-  let lastRefill = key.lastRefillAt;
+  entry.used += 1;
+  const remaining = MAX_REQUESTS - entry.used;
 
-  // Refill if window expired
-  if (!lastRefill || now.getTime() - lastRefill.getTime() >= WINDOW_MS) {
-    remaining = max;
-    requestCount = 0;
-    lastRefill = now;
-  }
+  broadcast(userId, { type: "usage", used: entry.used, max: MAX_REQUESTS, remaining });
 
-  // Blocked
-  if (remaining <= 0) {
-    const used = max;
-    broadcast(keyId, { type: "usage", used, max, remaining: 0 });
-    return { allowed: false, used, max, remaining: 0 };
-  }
-
-  // Decrement
-  remaining -= 1;
-  requestCount += 1;
-
-  await db
-    .update(apikey)
-    .set({
-      remaining,
-      requestCount,
-      lastRefillAt: lastRefill,
-      lastRequest: now,
-    })
-    .where(eq(apikey.id, keyId));
-
-  const used = max - remaining;
-  broadcast(keyId, { type: "usage", used, max, remaining });
-
-  return { allowed: true, used, max, remaining };
+  return { allowed: true, used: entry.used, max: MAX_REQUESTS, remaining };
 }
 
-export async function getUsage(keyId: string) {
-  const [key] = await db
-    .select()
-    .from(apikey)
-    .where(eq(apikey.id, keyId))
-    .limit(1);
-
-  if (!key) return null;
-
-  const now = new Date();
-  const max = key.rateLimitMax ?? MAX_REQUESTS;
-  let remaining = key.remaining ?? max;
-  const lastRefill = key.lastRefillAt;
-
-  if (!lastRefill || now.getTime() - lastRefill.getTime() >= WINDOW_MS) {
-    remaining = max;
-  }
-
-  return { used: max - remaining, max, remaining };
+export function getUsage(userId: string) {
+  const entry = getOrResetUsage(userId);
+  return {
+    used: entry.used,
+    max: MAX_REQUESTS,
+    remaining: MAX_REQUESTS - entry.used,
+  };
 }

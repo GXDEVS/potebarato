@@ -1,4 +1,7 @@
 import { createMiddleware } from "hono/factory";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { apikey } from "@/db/auth-schema";
 import { auth } from "@/lib/auth";
 import { incrementUsage } from "@/lib/rate-limit";
 
@@ -9,7 +12,7 @@ export const apiKeyAuth = createMiddleware(async (c, next) => {
     return c.json({ error: "API key required. Send via x-api-key header." }, 401);
   }
 
-  // Verify the key via better-auth (handles hashing internally)
+  // Verify key via better-auth (only validates, no rate limiting)
   const result = await auth.api.verifyApiKey({
     body: { key },
   });
@@ -18,8 +21,19 @@ export const apiKeyAuth = createMiddleware(async (c, next) => {
     return c.json({ error: "Invalid API key" }, 401);
   }
 
-  // Manual rate limit check + increment
-  const usage = await incrementUsage(result.key.id);
+  // Get userId from key
+  const [keyRow] = await db
+    .select({ userId: apikey.referenceId })
+    .from(apikey)
+    .where(eq(apikey.id, result.key.id))
+    .limit(1);
+
+  if (!keyRow) {
+    return c.json({ error: "Invalid API key" }, 401);
+  }
+
+  // Rate limit by USER (not by key)
+  const usage = incrementUsage(keyRow.userId);
 
   if (!usage.allowed) {
     return c.json(
@@ -33,6 +47,5 @@ export const apiKeyAuth = createMiddleware(async (c, next) => {
     );
   }
 
-  c.set("apiKeyId" as never, result.key.id as never);
   await next();
 });

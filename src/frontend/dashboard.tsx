@@ -56,16 +56,15 @@ function Dashboard() {
     }
   }, [session, fetchKeys]);
 
-  // WebSocket connection for real-time usage
+  // WebSocket connection for real-time usage (by userId)
   useEffect(() => {
-    const activeKey = keys.find((k) => k.enabled);
-    if (!activeKey) {
+    if (!session?.user?.id || keys.length === 0) {
       setUsage(null);
       return;
     }
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/usage/${activeKey.id}`);
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/usage/${session.user.id}`);
     wsRef.current = ws;
 
     ws.onmessage = (event) => {
@@ -85,7 +84,7 @@ function Dashboard() {
       ws.close();
       wsRef.current = null;
     };
-  }, [keys]);
+  }, [session, keys]);
 
   const createKey = async () => {
     if (loading || keys.length > 0) return;

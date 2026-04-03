@@ -71,13 +71,13 @@ export default {
   async fetch(req: Request, server: any) {
     const url = new URL(req.url);
 
-    // WebSocket upgrade for /ws/usage/:keyId
+    // WebSocket upgrade for /ws/usage/:userId
     if (url.pathname.startsWith("/ws/usage/")) {
-      const keyId = url.pathname.split("/ws/usage/")[1];
-      if (!keyId) {
-        return new Response("Missing keyId", { status: 400 });
+      const userId = url.pathname.split("/ws/usage/")[1];
+      if (!userId) {
+        return new Response("Missing userId", { status: 400 });
       }
-      const upgraded = server.upgrade(req, { data: { keyId } });
+      const upgraded = server.upgrade(req, { data: { userId } });
       if (upgraded) return undefined;
       return new Response("WebSocket upgrade failed", { status: 500 });
     }
@@ -90,15 +90,12 @@ export default {
     "/dashboard": dashboard,
   },
   websocket: {
-    async open(ws: any) {
-      const keyId = ws.data?.keyId;
-      if (keyId) {
-        subscribe(keyId, ws);
-        // Send initial usage
-        const usage = await getUsage(keyId);
-        if (usage) {
-          ws.send(JSON.stringify({ type: "usage", ...usage }));
-        }
+    open(ws: any) {
+      const userId = ws.data?.userId;
+      if (userId) {
+        subscribe(userId, ws);
+        const usage = getUsage(userId);
+        ws.send(JSON.stringify({ type: "usage", ...usage }));
       }
     },
     message(_ws: any, _message: any) {},
