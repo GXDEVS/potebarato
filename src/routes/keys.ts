@@ -88,11 +88,6 @@ app.post(
       body: {
         name: "potebarato-key",
         prefix: "pb",
-        rateLimitEnabled: true,
-        rateLimitMax: 100,
-        rateLimitTimeWindow: 1000 * 60 * 60,
-        refillAmount: 100,
-        refillInterval: 1000 * 60 * 60,
       },
       headers: c.req.raw.headers,
     });
