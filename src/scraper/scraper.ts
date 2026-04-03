@@ -2,7 +2,8 @@ import { chromium, type Browser, type Page } from "playwright";
 import type { SiteConfig, ProductData } from "./types";
 
 const POOL_SIZE = 3;
-const PAGE_TIMEOUT = 30_000;
+const PAGE_TIMEOUT = 45_000;
+const MAX_RETRIES = 2;
 const MIN_DELAY = 1000;
 const MAX_DELAY = 3000;
 
@@ -12,6 +13,7 @@ interface JsonLdExtracted {
   price: number;
   currency: string;
   inStock: boolean;
+  imageUrl: string | null;
 }
 
 export function parsePrice(raw: string): number {
@@ -35,6 +37,16 @@ export function extractWeightGrams(name: string): number | null {
   return null;
 }
 
+function extractImageUrl(data: Record<string, unknown>): string | null {
+  const img = data.image;
+  if (typeof img === "string") return img;
+  if (Array.isArray(img) && typeof img[0] === "string") return img[0];
+  if (Array.isArray(img) && typeof img[0]?.url === "string") return img[0].url;
+  if (typeof (img as Record<string, unknown>)?.url === "string")
+    return (img as Record<string, string>).url;
+  return null;
+}
+
 export function extractJsonLdProduct(
   scripts: string[],
   strategy: SiteConfig["jsonLdStrategy"]
@@ -54,6 +66,7 @@ export function extractJsonLdProduct(
           price: parseFloat(String(offer.price)),
           currency: offer.priceCurrency ?? "BRL",
           inStock: String(offer.availability ?? "").includes("InStock"),
+          imageUrl: extractImageUrl(data),
         };
       }
 
@@ -69,6 +82,7 @@ export function extractJsonLdProduct(
           price: parseFloat(String(offer.price)),
           currency: offer.priceCurrency ?? "BRL",
           inStock: String(offer.availability ?? "").includes("InStock"),
+          imageUrl: extractImageUrl(variant) ?? extractImageUrl(data),
         };
       }
     } catch {
@@ -110,6 +124,7 @@ async function scrapePage(
     let inStock: boolean;
     let brand: string;
     let currency: string;
+    let imageUrl: string | null;
 
     if (extracted) {
       name = extracted.name;
@@ -117,6 +132,7 @@ async function scrapePage(
       inStock = extracted.inStock;
       brand = extracted.brand || config.brand;
       currency = extracted.currency;
+      imageUrl = extracted.imageUrl;
     } else {
       console.warn(`[scraper] No JSON-LD for ${url}, using CSS fallback`);
       name = await page.$eval(config.selectors.productName, (el) =>
@@ -130,6 +146,10 @@ async function scrapePage(
       inStock = stockEl !== null;
       brand = config.brand;
       currency = "BRL";
+      imageUrl = await page.$eval(
+        'meta[property="og:image"]',
+        (el) => el.getAttribute("content")
+      ).catch(() => null);
     }
 
     const weightGrams = extractWeightGrams(name);
@@ -152,6 +172,7 @@ async function scrapePage(
       currency,
       inStock,
       url,
+      imageUrl,
       lastUpdate: new Date(),
     };
   } catch (error) {
@@ -175,7 +196,15 @@ async function processQueue(
   const results: ProductData[] = [];
 
   for (const url of urls) {
-    const product = await scrapePage(page, url, config);
+    let product: ProductData | null = null;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      product = await scrapePage(page, url, config);
+      if (product) break;
+      if (attempt < MAX_RETRIES) {
+        console.log(`[scraper] Retry ${attempt + 1}/${MAX_RETRIES} for ${url}`);
+        await delay(3000 * (attempt + 1));
+      }
+    }
     if (product) {
       results.push(product);
     }
