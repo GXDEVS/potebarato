@@ -5,7 +5,6 @@ import { max, count, desc } from "drizzle-orm";
 
 const app = new Hono();
 
-// Admin only — trigger manual scrape
 app.post("/api/scrape", async (c) => {
   const user = c.get("user" as never) as { id: string; role?: string } | null;
   if (!user) {
@@ -26,7 +25,6 @@ app.post("/api/scrape", async (c) => {
   });
 });
 
-// Admin only — scrape status
 app.get("/api/scrape/status", async (c) => {
   const [stats] = await db
     .select({
@@ -41,7 +39,6 @@ app.get("/api/scrape/status", async (c) => {
   });
 });
 
-// Public — products for landing page
 app.get("/api/landing/products", async (c) => {
   const data = await db
     .select({

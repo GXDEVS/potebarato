@@ -53,15 +53,12 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => {
   return auth.handler(c.req.raw);
 });
 
-// API Routes
 app.route("/", productsRoute);
 app.route("/", scrapeRoute);
 app.route("/", keysRoute);
-
-// OpenAPI + Scalar
 setupOpenAPI(app);
 
-// Scraper cron: every 6 hours
+// CronJob: executa o scraper a cada 6h em processo isolado via Bun.spawn
 const SIX_HOURS = 6 * 60 * 60 * 1000;
 setInterval(() => {
   Bun.spawn(["bun", "run", `${import.meta.dir}/scraper/worker.ts`], {
@@ -70,7 +67,6 @@ setInterval(() => {
   });
 }, SIX_HOURS);
 
-// Custom fetch handler to intercept WebSocket upgrades
 const honoFetch = app.fetch;
 
 export default {

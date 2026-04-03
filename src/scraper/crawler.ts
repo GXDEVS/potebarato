@@ -1,13 +1,12 @@
 import { chromium, type Page } from "playwright";
 import type { SiteConfig } from "./types";
 
-const HEADERS = {
-  "User-Agent": "potebarato-bot/1.0",
-};
-const FETCH_TIMEOUT = 10_000;
-const HEAD_CONCURRENCY = 10;
-const SEARCH_QUERY = "creatina";
+const HEADERS = { "User-Agent": "potebarato-bot/1.0" };
+const FETCH_TIMEOUT = 10_000;     // Timeout para requests de sitemap/HEAD (ms)
+const HEAD_CONCURRENCY = 10;      // Requests HEAD simultaneos para validacao
+const SEARCH_QUERY = "creatina";  // Termo de busca nos sites
 
+/** Extrai URLs de sitemaps do robots.txt */
 export function extractSitemapUrls(robotsTxt: string): string[] {
   return robotsTxt
     .split("\n")
@@ -20,6 +19,7 @@ type SitemapResult =
   | { type: "urlset"; urls: string[] }
   | { type: "sitemapindex"; urls: string[] };
 
+/** Parseia XML de sitemap — suporta tanto sitemapindex quanto urlset */
 export function parseSitemapXml(xml: string): SitemapResult {
   if (xml.includes("<sitemapindex")) {
     const urls: string[] = [];
@@ -40,20 +40,21 @@ export function parseSitemapXml(xml: string): SitemapResult {
   return { type: "urlset", urls };
 }
 
+/**
+ * Filtra URLs relevantes de creatina em po.
+ * Exclui kits/combos e capsulas/comprimidos (precisam de peso em g/kg).
+ */
 export function filterCreatinaUrls(urls: string[]): string[] {
   return urls.filter((url) => {
     const path = new URL(url).pathname.toLowerCase();
-    // Must contain "creatin" in path
     if (!/creatin/.test(path)) return false;
-    // Exclude kit/combo URLs
     if (/\/kit[-_]/.test(path)) return false;
-    // Exclude capsules/tablets — we need weight in g/kg for price-per-gram
     if (/comprimido|comp\b|capsul|caps\b|tablet/.test(path)) return false;
     return true;
   });
 }
 
-/** Normalize URL by removing query params and trailing slashes */
+/** Normaliza URL removendo query params e barras finais */
 export function normalizeUrl(url: string): string {
   try {
     const u = new URL(url);
@@ -107,10 +108,7 @@ async function expandSitemaps(sitemapUrls: string[]): Promise<string[]> {
   return allProductUrls;
 }
 
-// ---------------------------------------------------------------------------
-// HEAD validation — filter out 404/dead URLs cheaply before scraping
-// ---------------------------------------------------------------------------
-
+/** Verifica se a URL responde com status 2xx via HEAD request */
 async function checkUrlAlive(url: string): Promise<boolean> {
   try {
     const res = await fetch(url, {
@@ -146,10 +144,7 @@ export async function validateUrls(urls: string[]): Promise<string[]> {
   return alive;
 }
 
-// ---------------------------------------------------------------------------
-// Search-based discovery — find products via the site's own search
-// ---------------------------------------------------------------------------
-
+/** Descobre produtos via busca interna do site (Playwright) */
 export async function discoverFromSearch(
   config: SiteConfig
 ): Promise<string[]> {
@@ -178,7 +173,6 @@ export async function discoverFromSearch(
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
-    // Wait a bit for JS-rendered results
     await page.waitForTimeout(3000);
 
     for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
@@ -190,7 +184,6 @@ export async function discoverFromSearch(
       const nextBtn = await page.$(nextSelector);
       if (!nextBtn) break;
 
-      // Find the next page number — avoid revisiting current page
       const nextLinks = await page.$$eval(nextSelector, (els) =>
         els.map((el) => (el as HTMLAnchorElement).href)
       );
@@ -237,10 +230,7 @@ async function extractProductLinks(
     .filter((u): u is string => u !== null);
 }
 
-// ---------------------------------------------------------------------------
-// Main crawl — combines sitemap + search, deduplicates, validates
-// ---------------------------------------------------------------------------
-
+/** Pipeline principal: sitemap + search → deduplica → valida HEAD */
 export async function crawl(config: SiteConfig): Promise<string[]> {
   console.log(`[crawler] Starting crawl for ${config.brand} (${config.baseUrl})`);
 
