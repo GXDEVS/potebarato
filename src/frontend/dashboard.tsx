@@ -33,11 +33,15 @@ function Dashboard() {
   }, [session]);
 
   const fetchKeys = async () => {
-    const res = await fetch("/api/keys", { credentials: "include" });
-    if (res.ok) {
-      const data = await res.json();
-      const list = Array.isArray(data) ? data : (data.keys ?? []);
-      setKeys(list);
+    try {
+      const res = await fetch("/api/keys", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : Array.isArray(data?.keys) ? data.keys : [];
+        setKeys(list);
+      }
+    } catch {
+      setKeys([]);
     }
   };
 
@@ -86,7 +90,8 @@ function Dashboard() {
     );
   }
 
-  const activeKey = keys.find((k) => k.enabled);
+  const keysList = Array.isArray(keys) ? keys : [];
+  const activeKey = keysList.find((k) => k.enabled);
   const remaining = activeKey?.remaining ?? 0;
   const max = activeKey?.rateLimitMax ?? 100;
   const usagePercent = max > 0 ? (remaining / max) * 100 : 0;
