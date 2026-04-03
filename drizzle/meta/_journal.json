@@ -22,6 +22,13 @@
       "when": 1775185405293,
       "tag": "0002_talented_plazm",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1775241273326,
+      "tag": "0003_fixed_boomerang",
+      "breakpoints": true
     }
   ]
 }

@@ -20,5 +20,6 @@ export const products = pgTable("products", {
   currency: text("currency").notNull().default("BRL"),
   inStock: boolean("in_stock").notNull().default(true),
   url: text("url").notNull().unique(),
+  imageUrl: text("image_url"),
   lastUpdate: timestamp("last_update", { withTimezone: true }).notNull(),
 });

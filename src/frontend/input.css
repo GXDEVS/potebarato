@@ -15,3 +15,183 @@
     -webkit-font-smoothing: antialiased;
   }
 }
+
+/* Marquee Section */
+@layer components {
+  .marquee-section {
+    padding: 3rem 0 4rem;
+    margin-top: 4rem;
+    border-top: 1px solid #262626;
+    overflow: hidden;
+  }
+
+  .marquee-title {
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 2rem;
+    letter-spacing: -0.025em;
+  }
+
+  .marquee-wrapper {
+    overflow: hidden;
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      black 5%,
+      black 95%,
+      transparent
+    );
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent,
+      black 5%,
+      black 95%,
+      transparent
+    );
+  }
+
+  .marquee-track {
+    display: flex;
+    gap: 1rem;
+    width: max-content;
+    animation: marquee-scroll 40s linear infinite;
+  }
+
+  .marquee-track:hover {
+    animation-play-state: paused;
+  }
+
+  .marquee-card {
+    flex-shrink: 0;
+    width: 260px;
+    background: #141414;
+    border: 1px solid #262626;
+    border-radius: 0.75rem;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .marquee-card:hover {
+    border-color: #10b981;
+    transform: translateY(-4px);
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
+  }
+
+  .marquee-card-image {
+    width: 100%;
+    height: 160px;
+    background: #ffffff;
+    border-radius: 0.75rem 0.75rem 0 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .marquee-card-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    padding: 0.75rem;
+    border-radius: 0.75rem 0.75rem 0 0;
+  }
+
+  .marquee-card-placeholder {
+    color: #52525b;
+    font-size: 0.75rem;
+    background: #ffffff;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.75rem 0.75rem 0 0;
+  }
+
+  .marquee-card-body {
+    padding: 0.75rem 1rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .marquee-card-brand {
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #10b981;
+  }
+
+  .marquee-card-name {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #d4d4d8;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.3;
+    min-height: 2.1em;
+  }
+
+  .marquee-card-prices {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+  }
+
+  .marquee-card-price {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .marquee-card-perg {
+    font-size: 0.7rem;
+    color: #71717a;
+  }
+
+  .marquee-card-stock {
+    font-size: 0.65rem;
+    font-weight: 600;
+    margin-top: 0.25rem;
+  }
+
+  .marquee-card-stock.in-stock {
+    color: #34d399;
+  }
+
+  .marquee-card-stock.out-stock {
+    color: #f87171;
+  }
+}
+
+@keyframes animate-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-in {
+  animation: animate-in 0.25s ease-out;
+}
+
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}

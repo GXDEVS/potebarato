@@ -1,3 +1,14 @@
+export interface SearchConfig {
+  /** Search URL with {query} placeholder, e.g. "/search?q={query}&type=product" */
+  path: string;
+  /** CSS selector for product links in search results */
+  linkSelector: string;
+  /** CSS selector for "next page" button (optional, for pagination) */
+  nextPageSelector?: string;
+  /** Max pages to follow during search pagination */
+  maxPages?: number;
+}
+
 export interface SiteConfig {
   baseUrl: string;
   brand: string;
@@ -15,6 +26,8 @@ export interface SiteConfig {
   jsonLdStrategy: "product" | "product-group";
   /** Filter to select which sitemaps from robots.txt to use. If not set, uses all. */
   sitemapFilter?: RegExp;
+  /** Search-based URL discovery config */
+  search?: SearchConfig;
 }
 
 export interface ProductData {
@@ -26,5 +39,6 @@ export interface ProductData {
   currency: string;
   inStock: boolean;
   url: string;
+  imageUrl: string | null;
   lastUpdate: Date;
 }

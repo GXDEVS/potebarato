@@ -9,4 +9,10 @@ export const soldiers: SiteConfig = {
     price: ".ec-price-custom__pix-value",
     inStock: ".product-form__submit",
   },
+  search: {
+    path: "/search?q={query}&type=product",
+    linkSelector: 'a[href*="/products/"]',
+    nextPageSelector: 'a[href*="page="]',
+    maxPages: 3,
+  },
 };

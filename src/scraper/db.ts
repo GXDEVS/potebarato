@@ -20,6 +20,7 @@ export async function upsertProducts(data: ProductData[]): Promise<number> {
         currency: product.currency,
         inStock: product.inStock,
         url: product.url,
+        imageUrl: product.imageUrl,
         lastUpdate: product.lastUpdate,
       })
       .onConflictDoUpdate({
@@ -32,6 +33,7 @@ export async function upsertProducts(data: ProductData[]): Promise<number> {
           pricePerGram: sql`excluded.price_per_gram`,
           currency: sql`excluded.currency`,
           inStock: sql`excluded.in_stock`,
+          imageUrl: sql`excluded.image_url`,
           lastUpdate: sql`excluded.last_update`,
         },
       });

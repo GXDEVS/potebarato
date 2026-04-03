@@ -10,4 +10,9 @@ export const gsuplementos: SiteConfig = {
     price: ".preco-vista-default",
     inStock: ".em-estoque-default",
   },
+  search: {
+    path: "/busca?busca={query}",
+    linkSelector: 'a[href*="creatina"]',
+    maxPages: 3,
+  },
 };

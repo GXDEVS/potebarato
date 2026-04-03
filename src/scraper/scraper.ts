@@ -47,43 +47,61 @@ function extractImageUrl(data: Record<string, unknown>): string | null {
   return null;
 }
 
+function extractFromProduct(data: Record<string, unknown>): JsonLdExtracted | null {
+  const offer = Array.isArray(data.offers)
+    ? data.offers[0]
+    : data.offers;
+  if (!offer) return null;
+  return {
+    name: data.name as string,
+    brand: (data.brand as any)?.name ?? "",
+    price: parseFloat(String(offer.price)),
+    currency: offer.priceCurrency ?? "BRL",
+    inStock: String(offer.availability ?? "").includes("InStock"),
+    imageUrl: extractImageUrl(data),
+  };
+}
+
+function extractFromProductGroup(data: Record<string, unknown>): JsonLdExtracted | null {
+  const variant = (data as any).hasVariant?.[0];
+  if (!variant?.offers) return null;
+  const offer = Array.isArray(variant.offers)
+    ? variant.offers[0]
+    : variant.offers;
+  return {
+    name: variant.name ?? (data.name as string),
+    brand: (data.brand as any)?.name ?? "",
+    price: parseFloat(String(offer.price)),
+    currency: offer.priceCurrency ?? "BRL",
+    inStock: String(offer.availability ?? "").includes("InStock"),
+    imageUrl: extractImageUrl(variant) ?? extractImageUrl(data),
+  };
+}
+
+function matchJsonLdItem(
+  data: Record<string, unknown>,
+  strategy: SiteConfig["jsonLdStrategy"]
+): JsonLdExtracted | null {
+  if (strategy === "product" && data["@type"] === "Product") {
+    return extractFromProduct(data);
+  }
+  if (strategy === "product-group" && data["@type"] === "ProductGroup") {
+    return extractFromProductGroup(data);
+  }
+  return null;
+}
+
 export function extractJsonLdProduct(
   scripts: string[],
   strategy: SiteConfig["jsonLdStrategy"]
 ): JsonLdExtracted | null {
   for (const raw of scripts) {
     try {
-      const data = JSON.parse(raw);
-
-      if (strategy === "product" && data["@type"] === "Product") {
-        const offer = Array.isArray(data.offers)
-          ? data.offers[0]
-          : data.offers;
-        if (!offer) continue;
-        return {
-          name: data.name,
-          brand: data.brand?.name ?? "",
-          price: parseFloat(String(offer.price)),
-          currency: offer.priceCurrency ?? "BRL",
-          inStock: String(offer.availability ?? "").includes("InStock"),
-          imageUrl: extractImageUrl(data),
-        };
-      }
-
-      if (strategy === "product-group" && data["@type"] === "ProductGroup") {
-        const variant = data.hasVariant?.[0];
-        if (!variant?.offers) continue;
-        const offer = Array.isArray(variant.offers)
-          ? variant.offers[0]
-          : variant.offers;
-        return {
-          name: variant.name ?? data.name,
-          brand: data.brand?.name ?? "",
-          price: parseFloat(String(offer.price)),
-          currency: offer.priceCurrency ?? "BRL",
-          inStock: String(offer.availability ?? "").includes("InStock"),
-          imageUrl: extractImageUrl(variant) ?? extractImageUrl(data),
-        };
+      const parsed = JSON.parse(raw);
+      const items = Array.isArray(parsed) ? parsed : [parsed];
+      for (const data of items) {
+        const result = matchJsonLdItem(data, strategy);
+        if (result) return result;
       }
     } catch {
       continue;
@@ -101,84 +119,141 @@ function randomDelay(): Promise<void> {
   return delay(ms);
 }
 
+/**
+ * Image fallback cascade (tries each until one succeeds):
+ * 1. og:image meta tag
+ * 2. twitter:image meta tag
+ * 3. Shopify product .json API (for Shopify stores)
+ * 4. First product img tag on the page
+ */
+async function fallbackImageUrl(page: Page, url: string): Promise<string | null> {
+  // 1. og:image
+  const ogImage = await page.$eval(
+    'meta[property="og:image"]',
+    (el) => el.getAttribute("content")
+  ).catch(() => null);
+  if (ogImage) return ogImage;
+
+  // 2. twitter:image or og:image:secure_url
+  const twitterImage = await page.$eval(
+    'meta[property="og:image:secure_url"], meta[name="twitter:image"]',
+    (el) => el.getAttribute("content")
+  ).catch(() => null);
+  if (twitterImage) return twitterImage;
+
+  // 3. Shopify .json API — works for /products/<handle> URLs
+  const shopifyMatch = url.match(/\/products\/([^/?#]+)/);
+  if (shopifyMatch) {
+    try {
+      const origin = new URL(url).origin;
+      const jsonUrl = `${origin}/products/${shopifyMatch[1]}.json`;
+      const res = await fetch(jsonUrl, {
+        signal: AbortSignal.timeout(5000),
+        headers: { "User-Agent": "potebarato-bot/1.0" },
+      });
+      if (res.ok) {
+        const data = await res.json() as { product?: { image?: { src?: string }; images?: { src: string }[] } };
+        const src = data.product?.image?.src ?? data.product?.images?.[0]?.src;
+        if (src) return src;
+      }
+    } catch {
+      // ignore, try next fallback
+    }
+  }
+
+  // 4. First product image on the page
+  const imgSrc = await page.$eval(
+    'img[src*="product"], img[src*="cdn.shopify"], img[src*="upload/produto"]',
+    (el) => (el as HTMLImageElement).src
+  ).catch(() => null);
+
+  return imgSrc;
+}
+
+/** Thrown when a product is valid but not relevant (e.g. no weight) — should NOT be retried */
+class SkipProductError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SkipProductError";
+  }
+}
+
 async function scrapePage(
   page: Page,
   url: string,
   config: SiteConfig
 ): Promise<ProductData | null> {
-  try {
-    await page.goto(url, {
-      waitUntil: "domcontentloaded",
-      timeout: PAGE_TIMEOUT,
-    });
+  await page.goto(url, {
+    waitUntil: "domcontentloaded",
+    timeout: PAGE_TIMEOUT,
+  });
 
-    const jsonLdScripts = await page.$$eval(
-      'script[type="application/ld+json"]',
-      (scripts) => scripts.map((s) => s.textContent ?? "")
+  const jsonLdScripts = await page.$$eval(
+    'script[type="application/ld+json"]',
+    (scripts) => scripts.map((s) => s.textContent ?? "")
+  );
+
+  const extracted = extractJsonLdProduct(jsonLdScripts, config.jsonLdStrategy);
+
+  let name: string;
+  let price: number;
+  let inStock: boolean;
+  let brand: string;
+  let currency: string;
+  let imageUrl: string | null;
+
+  if (extracted) {
+    name = extracted.name;
+    price = extracted.price;
+    inStock = extracted.inStock;
+    brand = extracted.brand || config.brand;
+    currency = extracted.currency;
+    imageUrl = extracted.imageUrl;
+  } else {
+    console.warn(`[scraper] No JSON-LD for ${url}, using CSS fallback`);
+    name = await page.$eval(config.selectors.productName, (el) =>
+      el.textContent?.trim() ?? ""
     );
-
-    const extracted = extractJsonLdProduct(jsonLdScripts, config.jsonLdStrategy);
-
-    let name: string;
-    let price: number;
-    let inStock: boolean;
-    let brand: string;
-    let currency: string;
-    let imageUrl: string | null;
-
-    if (extracted) {
-      name = extracted.name;
-      price = extracted.price;
-      inStock = extracted.inStock;
-      brand = extracted.brand || config.brand;
-      currency = extracted.currency;
-      imageUrl = extracted.imageUrl;
-    } else {
-      console.warn(`[scraper] No JSON-LD for ${url}, using CSS fallback`);
-      name = await page.$eval(config.selectors.productName, (el) =>
-        el.textContent?.trim() ?? ""
-      );
-      const priceText = await page.$eval(config.selectors.price, (el) =>
-        el.textContent?.trim() ?? ""
-      );
-      price = parsePrice(priceText);
-      const stockEl = await page.$(config.selectors.inStock);
-      inStock = stockEl !== null;
-      brand = config.brand;
-      currency = "BRL";
-      imageUrl = await page.$eval(
-        'meta[property="og:image"]',
-        (el) => el.getAttribute("content")
-      ).catch(() => null);
-    }
-
-    const weightGrams = extractWeightGrams(name);
-    if (!weightGrams) {
-      console.warn(`[scraper] Could not extract weight from "${name}", skipping`);
-      return null;
-    }
-
-    if (isNaN(price) || price <= 0) {
-      console.warn(`[scraper] Invalid price for "${name}", skipping`);
-      return null;
-    }
-
-    return {
-      brand,
-      productName: name,
-      totalPrice: price,
-      weightGrams,
-      pricePerGram: Math.round((price / weightGrams) * 1_000_000) / 1_000_000,
-      currency,
-      inStock,
-      url,
-      imageUrl,
-      lastUpdate: new Date(),
-    };
-  } catch (error) {
-    console.error(`[scraper] Failed to scrape ${url}:`, error);
-    return null;
+    const priceText = await page.$eval(config.selectors.price, (el) =>
+      el.textContent?.trim() ?? ""
+    );
+    price = parsePrice(priceText);
+    const stockEl = await page.$(config.selectors.inStock);
+    inStock = stockEl !== null;
+    brand = config.brand;
+    currency = "BRL";
+    imageUrl = null;
   }
+
+  // Image fallback cascade when JSON-LD didn't provide one
+  if (!imageUrl) {
+    imageUrl = await fallbackImageUrl(page, url);
+    if (imageUrl) {
+      console.log(`[scraper] Image found via fallback for ${url}`);
+    }
+  }
+
+  const weightGrams = extractWeightGrams(name);
+  if (!weightGrams) {
+    throw new SkipProductError(`Could not extract weight from "${name}"`);
+  }
+
+  if (isNaN(price) || price <= 0) {
+    throw new SkipProductError(`Invalid price for "${name}"`);
+  }
+
+  return {
+    brand,
+    productName: name,
+    totalPrice: price,
+    weightGrams,
+    pricePerGram: Math.round((price / weightGrams) * 1_000_000) / 1_000_000,
+    currency,
+    inStock,
+    url,
+    imageUrl,
+    lastUpdate: new Date(),
+  };
 }
 
 async function processQueue(
@@ -198,11 +273,20 @@ async function processQueue(
   for (const url of urls) {
     let product: ProductData | null = null;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      product = await scrapePage(page, url, config);
-      if (product) break;
-      if (attempt < MAX_RETRIES) {
-        console.log(`[scraper] Retry ${attempt + 1}/${MAX_RETRIES} for ${url}`);
-        await delay(3000 * (attempt + 1));
+      try {
+        product = await scrapePage(page, url, config);
+        break;
+      } catch (error) {
+        if (error instanceof SkipProductError) {
+          console.warn(`[scraper] ${error.message}, skipping`);
+          break;
+        }
+        if (attempt < MAX_RETRIES) {
+          console.log(`[scraper] Retry ${attempt + 1}/${MAX_RETRIES} for ${url}`);
+          await delay(3000 * (attempt + 1));
+        } else {
+          console.error(`[scraper] Failed to scrape ${url} after ${MAX_RETRIES} retries:`, error);
+        }
       }
     }
     if (product) {

@@ -1,16 +1,522 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { createRoot } from "react-dom/client";
+
+interface Product {
+  id: string;
+  brand: string;
+  productName: string;
+  totalPrice: string;
+  weightGrams: number;
+  pricePerGram: string;
+  inStock: boolean;
+  url: string;
+  imageUrl: string | null;
+}
+
+type SortKey = "price" | "pricePerGram" | "weight";
+
+function ComparePanel({
+  products,
+  onClose,
+  onRemove,
+}: {
+  products: Product[];
+  onClose: () => void;
+  onRemove: (id: string) => void;
+}) {
+  const minPrice = Math.min(...products.map((p) => parseFloat(p.totalPrice)));
+  const minPpg = Math.min(...products.map((p) => parseFloat(p.pricePerGram)));
+  const maxWeight = Math.max(...products.map((p) => p.weightGrams));
+
+  return (
+    <div className="mb-10 bg-[#141414] border border-emerald-500/20 rounded-2xl p-6 animate-in">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-bold text-white">Comparativo</h3>
+        <button
+          onClick={onClose}
+          className="text-zinc-500 hover:text-white transition text-sm"
+        >
+          Fechar
+        </button>
+      </div>
+      <div className={`grid gap-4 ${
+        products.length === 1 ? "grid-cols-1 max-w-xs mx-auto" :
+        products.length === 2 ? "grid-cols-1 sm:grid-cols-2" :
+        products.length === 3 ? "grid-cols-1 sm:grid-cols-3" :
+        "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
+      }`}>
+        {products.map((p) => {
+          const price = parseFloat(p.totalPrice);
+          const ppg = parseFloat(p.pricePerGram);
+          const isMinPrice = price === minPrice;
+          const isMinPpg = ppg === minPpg;
+          const isMaxWeight = p.weightGrams === maxWeight;
+          return (
+            <div key={p.id} className="bg-[#0a0a0a] border border-[#262626] rounded-xl p-5 relative">
+              <button
+                onClick={() => onRemove(p.id)}
+                className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full text-zinc-600 hover:text-white hover:bg-[#262626] transition text-xs"
+              >
+                x
+              </button>
+              <div className="w-full h-24 bg-white rounded-lg flex items-center justify-center mb-4">
+                {p.imageUrl ? (
+                  <img src={p.imageUrl} alt={p.productName} className="h-full w-full object-contain p-2 rounded-lg" />
+                ) : (
+                  <span className="text-zinc-400 text-xs">Sem imagem</span>
+                )}
+              </div>
+              <div className="text-[10px] uppercase tracking-wider text-emerald-500 font-semibold">{p.brand}</div>
+              <div className="text-sm text-zinc-200 mt-1 line-clamp-2 leading-snug font-medium">{p.productName}</div>
+              <div className="mt-4 space-y-2.5">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-zinc-500">Preço</span>
+                  <span className={`font-bold ${isMinPrice ? "text-emerald-400" : "text-white"}`}>
+                    R$ {price.toFixed(2)}
+                    {isMinPrice && products.length > 1 && <span className="ml-1.5 text-[10px] bg-emerald-500/10 px-1.5 py-0.5 rounded">menor</span>}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-zinc-500">Peso</span>
+                  <span className={`font-medium ${isMaxWeight ? "text-emerald-400" : "text-white"}`}>
+                    {p.weightGrams}g
+                    {isMaxWeight && products.length > 1 && <span className="ml-1.5 text-[10px] bg-emerald-500/10 px-1.5 py-0.5 rounded">maior</span>}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-zinc-500">Custo/g</span>
+                  <span className={`font-bold ${isMinPpg ? "text-emerald-400" : "text-white"}`}>
+                    R$ {ppg.toFixed(4)}
+                    {isMinPpg && products.length > 1 && <span className="ml-1.5 text-[10px] bg-emerald-500/10 px-1.5 py-0.5 rounded">melhor</span>}
+                  </span>
+                </div>
+              </div>
+              <a
+                href={p.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 block text-center text-xs font-medium text-emerald-400 hover:text-emerald-300 transition py-2 border border-[#262626] rounded-lg hover:border-emerald-500/30"
+              >
+                Ver na loja
+              </a>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PriceComparator({ products }: { products: Product[] }) {
+  const [search, setSearch] = useState("");
+  const [brandFilter, setBrandFilter] = useState("all");
+  const [stockOnly, setStockOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<SortKey>("pricePerGram");
+  const [compareIds, setCompareIds] = useState<Set<string>>(new Set());
+  const [showCompare, setShowCompare] = useState(false);
+  const compareRef = useRef<HTMLDivElement>(null);
+
+  const brands = useMemo(
+    () => [...new Set(products.map((p) => p.brand))].sort(),
+    [products]
+  );
+
+  const filtered = useMemo(() => {
+    let list = [...products];
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (p) =>
+          p.productName.toLowerCase().includes(q) ||
+          p.brand.toLowerCase().includes(q)
+      );
+    }
+    if (brandFilter !== "all") {
+      list = list.filter((p) => p.brand === brandFilter);
+    }
+    if (stockOnly) {
+      list = list.filter((p) => p.inStock);
+    }
+    list.sort((a, b) => {
+      if (sortBy === "price") return parseFloat(a.totalPrice) - parseFloat(b.totalPrice);
+      if (sortBy === "pricePerGram") return parseFloat(a.pricePerGram) - parseFloat(b.pricePerGram);
+      return b.weightGrams - a.weightGrams;
+    });
+    return list;
+  }, [products, search, brandFilter, stockOnly, sortBy]);
+
+  const bestByPrice = useMemo(() => {
+    if (filtered.length === 0) return null;
+    return filtered.reduce((best, p) =>
+      parseFloat(p.totalPrice) < parseFloat(best.totalPrice) ? p : best
+    );
+  }, [filtered]);
+
+  const bestByValue = useMemo(() => {
+    if (filtered.length === 0) return null;
+    return filtered.reduce((best, p) =>
+      parseFloat(p.pricePerGram) < parseFloat(best.pricePerGram) ? p : best
+    );
+  }, [filtered]);
+
+  const comparing = useMemo(
+    () => products.filter((p) => compareIds.has(p.id)),
+    [products, compareIds]
+  );
+
+  function toggleCompare(id: string) {
+    setCompareIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else if (next.size < 4) next.add(id);
+      return next;
+    });
+  }
+
+  function openCompare() {
+    setShowCompare(true);
+    setTimeout(() => {
+      compareRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  }
+
+  return (
+    <section className="py-20 px-4 border-t border-[#262626]" id="comparador">
+      <div className="max-w-6xl mx-auto">
+        <h2 className="text-3xl font-bold tracking-tight text-center mb-3">
+          Comparador de <span className="text-emerald-500">preços</span>
+        </h2>
+        <p className="text-center text-zinc-400 text-sm mb-10">
+          Encontre a creatina mais barata ou com melhor custo-benefício
+        </p>
+
+        {/* Filters */}
+        <div className="flex flex-wrap gap-3 mb-8">
+          <input
+            type="text"
+            placeholder="Buscar produto ou marca..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-1 min-w-[200px] bg-[#141414] border border-[#262626] rounded-lg px-4 py-2.5 text-sm text-white placeholder-zinc-500 outline-none focus:border-emerald-500/50 transition"
+          />
+          <select
+            value={brandFilter}
+            onChange={(e) => setBrandFilter(e.target.value)}
+            className="bg-[#141414] border border-[#262626] rounded-lg px-4 py-2.5 text-sm text-white outline-none focus:border-emerald-500/50 transition"
+          >
+            <option value="all">Todas as marcas</option>
+            {brands.map((b) => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortKey)}
+            className="bg-[#141414] border border-[#262626] rounded-lg px-4 py-2.5 text-sm text-white outline-none focus:border-emerald-500/50 transition"
+          >
+            <option value="pricePerGram">Melhor custo/g</option>
+            <option value="price">Menor preço</option>
+            <option value="weight">Maior peso</option>
+          </select>
+          <button
+            onClick={() => setStockOnly(!stockOnly)}
+            className={`px-4 py-2.5 rounded-lg text-sm font-medium border transition ${
+              stockOnly
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                : "bg-[#141414] border-[#262626] text-zinc-400"
+            }`}
+          >
+            Em estoque
+          </button>
+        </div>
+
+        {/* Highlights */}
+        {filtered.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+            {bestByPrice && (
+              <div className="bg-[#141414] border border-[#262626] rounded-xl p-5 flex items-center gap-4">
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                  <span className="text-emerald-500 text-lg font-bold">$</span>
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs text-zinc-500 mb-0.5">Mais barata</div>
+                  <div className="text-sm font-medium text-white truncate">{bestByPrice.productName}</div>
+                  <div className="text-emerald-500 font-bold">R$ {parseFloat(bestByPrice.totalPrice).toFixed(2)}</div>
+                </div>
+              </div>
+            )}
+            {bestByValue && (
+              <div className="bg-[#141414] border border-[#262626] rounded-xl p-5 flex items-center gap-4">
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                  <span className="text-emerald-500 text-lg font-bold">g</span>
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs text-zinc-500 mb-0.5">Melhor custo-benefício</div>
+                  <div className="text-sm font-medium text-white truncate">{bestByValue.productName}</div>
+                  <div className="text-emerald-500 font-bold">R$ {parseFloat(bestByValue.pricePerGram).toFixed(4)}/g</div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Inline compare panel */}
+        <div ref={compareRef}>
+          {showCompare && comparing.length > 0 && (
+            <ComparePanel
+              products={comparing}
+              onClose={() => setShowCompare(false)}
+              onRemove={(id) => toggleCompare(id)}
+            />
+          )}
+        </div>
+
+        {/* Product cards grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map((p, i) => {
+            const price = parseFloat(p.totalPrice);
+            const ppg = parseFloat(p.pricePerGram);
+            const isSelected = compareIds.has(p.id);
+            const isBestPrice = bestByPrice?.id === p.id;
+            const isBestValue = bestByValue?.id === p.id;
+            const rank = i + 1;
+
+            return (
+              <div
+                key={p.id}
+                className={`group relative bg-[#141414] rounded-xl border transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:shadow-emerald-500/5 ${
+                  isSelected
+                    ? "border-emerald-500/40 shadow-md shadow-emerald-500/5"
+                    : rank === 1
+                    ? "border-emerald-500/25"
+                    : "border-[#262626] hover:border-[#363636]"
+                }`}
+              >
+                {/* Rank badge */}
+                {rank <= 3 && (
+                  <div className={`absolute top-3 left-3 z-10 w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold ${
+                    rank === 1
+                      ? "bg-emerald-500 text-white"
+                      : rank === 2
+                      ? "bg-[#262626] text-zinc-300"
+                      : "bg-[#1e1e1e] text-zinc-400"
+                  }`}>
+                    {rank}
+                  </div>
+                )}
+
+                {/* Compare checkbox */}
+                <button
+                  onClick={() => toggleCompare(p.id)}
+                  className={`absolute top-3 right-3 z-10 w-7 h-7 rounded-lg border text-xs flex items-center justify-center transition ${
+                    isSelected
+                      ? "bg-emerald-500 border-emerald-500 text-white"
+                      : "border-[#363636] text-transparent bg-[#141414]/80 backdrop-blur-sm group-hover:border-zinc-500 group-hover:text-zinc-600"
+                  }`}
+                  title={isSelected ? "Remover da comparação" : "Adicionar à comparação"}
+                >
+                  {isSelected ? "\u2713" : "+"}
+                </button>
+
+                {/* Image */}
+                <div className="w-full h-40 bg-white rounded-t-xl flex items-center justify-center overflow-hidden">
+                  {p.imageUrl ? (
+                    <img src={p.imageUrl} alt={p.productName} className="h-full w-full object-contain p-3" loading="lazy" />
+                  ) : (
+                    <span className="text-zinc-400 text-xs">Sem imagem</span>
+                  )}
+                </div>
+
+                {/* Body */}
+                <div className="p-4">
+                  {/* Tags */}
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <span className="text-[10px] uppercase tracking-wider text-emerald-500 font-semibold">{p.brand}</span>
+                    {isBestPrice && (
+                      <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded-full font-medium">
+                        Mais barata
+                      </span>
+                    )}
+                    {isBestValue && !isBestPrice && (
+                      <span className="text-[10px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded-full font-medium">
+                        Melhor custo
+                      </span>
+                    )}
+                    {!p.inStock && (
+                      <span className="text-[10px] bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded-full font-medium">
+                        Indisponível
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Name */}
+                  <h3 className="text-sm text-zinc-200 font-medium line-clamp-2 leading-snug mb-3 min-h-[2.5em]">
+                    {p.productName}
+                  </h3>
+
+                  {/* Price row */}
+                  <div className="flex items-baseline justify-between mb-1">
+                    <span className="text-xl font-bold text-white">R$ {price.toFixed(2)}</span>
+                    <span className="text-xs text-zinc-500 bg-[#0a0a0a] px-2 py-1 rounded-md">{p.weightGrams}g</span>
+                  </div>
+
+                  {/* Cost per gram */}
+                  <div className="text-sm text-emerald-400 font-medium mb-4">
+                    R$ {ppg.toFixed(4)}<span className="text-zinc-500 text-xs">/g</span>
+                  </div>
+
+                  {/* Stock indicator + link */}
+                  <div className="flex items-center justify-between pt-3 border-t border-[#262626]">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`w-1.5 h-1.5 rounded-full ${p.inStock ? "bg-emerald-500" : "bg-zinc-600"}`} />
+                      <span className="text-xs text-zinc-500">{p.inStock ? "Em estoque" : "Indisponível"}</span>
+                    </div>
+                    <a
+                      href={p.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-medium text-zinc-400 hover:text-emerald-400 transition"
+                    >
+                      Ver na loja →
+                    </a>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {filtered.length === 0 && (
+          <div className="py-16 text-center text-zinc-500 text-sm bg-[#141414] border border-[#262626] rounded-xl">
+            Nenhum produto encontrado com esses filtros
+          </div>
+        )}
+
+        {/* Results count */}
+        {filtered.length > 0 && (
+          <div className="mt-4 text-center text-xs text-zinc-600">
+            {filtered.length} produto{filtered.length !== 1 ? "s" : ""} encontrado{filtered.length !== 1 ? "s" : ""}
+          </div>
+        )}
+      </div>
+
+      {/* Sticky bottom compare bar */}
+      {compareIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#141414]/90 backdrop-blur-xl border-t border-[#262626]">
+          <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex -space-x-2">
+                {comparing.map((p) => (
+                  <div key={p.id} className="w-9 h-9 rounded-full border-2 border-[#141414] bg-white overflow-hidden shrink-0">
+                    {p.imageUrl ? (
+                      <img src={p.imageUrl} alt="" className="w-full h-full object-contain p-0.5" />
+                    ) : (
+                      <div className="w-full h-full bg-[#262626] flex items-center justify-center text-[8px] text-zinc-500">?</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <span className="text-sm text-zinc-300">
+                {compareIds.size} produto{compareIds.size > 1 ? "s" : ""}
+                <span className="text-zinc-600 ml-1 hidden sm:inline">selecionado{compareIds.size > 1 ? "s" : ""}</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => { setCompareIds(new Set()); setShowCompare(false); }}
+                className="text-xs text-zinc-500 hover:text-white transition px-3 py-2"
+              >
+                Limpar
+              </button>
+              <button
+                onClick={openCompare}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-5 py-2 rounded-lg transition"
+              >
+                Comparar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ProductCard({ product }: { product: Product }) {
+  const price = parseFloat(product.totalPrice);
+  const pricePerGram = parseFloat(product.pricePerGram);
+
+  return (
+    <a
+      href={product.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="marquee-card"
+    >
+      <div className="marquee-card-image">
+        {product.imageUrl ? (
+          <img
+            src={product.imageUrl}
+            alt={product.productName}
+            loading="lazy"
+          />
+        ) : (
+          <div className="marquee-card-placeholder">
+            <span>Sem imagem</span>
+          </div>
+        )}
+      </div>
+      <div className="marquee-card-body">
+        <span className="marquee-card-brand">{product.brand}</span>
+        <span className="marquee-card-name">{product.productName}</span>
+        <div className="marquee-card-prices">
+          <span className="marquee-card-price">
+            R$ {price.toFixed(2)}
+          </span>
+          <span className="marquee-card-perg">
+            R$ {pricePerGram.toFixed(4)}/g
+          </span>
+        </div>
+        <span
+          className={`marquee-card-stock ${product.inStock ? "in-stock" : "out-stock"}`}
+        >
+          {product.inStock ? "Em estoque" : "Indisponível"}
+        </span>
+      </div>
+    </a>
+  );
+}
+
+function Marquee({ products }: { products: Product[] }) {
+  const doubled = [...products, ...products];
+
+  return (
+    <div className="marquee-wrapper">
+      <div className="marquee-track">
+        {doubled.map((p, i) => (
+          <ProductCard key={`${p.id}-${i}`} product={p} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function Landing() {
   const [stats, setStats] = useState<{
     total_products: number;
     last_update: string | null;
   } | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
 
   useEffect(() => {
     fetch("/api/scrape/status")
       .then((r) => r.json() as Promise<{ total_products: number; last_update: string | null }>)
       .then(setStats)
+      .catch(() => {});
+
+    fetch("/api/landing/products")
+      .then((r) => r.json() as Promise<Product[]>)
+      .then(setProducts)
       .catch(() => {});
   }, []);
 
@@ -33,7 +539,7 @@ function Landing() {
         </div>
       </nav>
 
-      <main className="flex-1 flex flex-col items-center justify-center px-4">
+      <main className="flex flex-col items-center px-4 py-24">
         <div className="max-w-2xl text-center space-y-6">
           <h1 className="text-5xl font-bold tracking-tight">
             Compare preços de{" "}
@@ -63,12 +569,12 @@ function Landing() {
             </div>
           )}
 
-          <div className="flex gap-4 justify-center pt-4">
+          <div className="flex flex-wrap gap-4 justify-center pt-4">
             <a
-              href="/auth"
+              href="#comparador"
               className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3 rounded-xl font-medium text-lg transition"
             >
-              Começar grátis
+              Comparar preços
             </a>
             <a
               href="/docs"
@@ -80,8 +586,78 @@ function Landing() {
         </div>
       </main>
 
+      {products.length > 0 && (
+        <section className="marquee-section">
+          <h2 className="marquee-title">
+            Produtos monitorados em <span className="text-emerald-500">tempo real</span>
+          </h2>
+          <Marquee products={products} />
+        </section>
+      )}
+
+      {products.length > 0 && <PriceComparator products={products} />}
+
+      <section className="py-20 px-4 border-t border-[#262626]">
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-3xl font-bold tracking-tight text-center mb-12">
+            Como <span className="text-emerald-500">funciona</span>
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-[#141414] border border-[#262626] rounded-xl p-6 space-y-3">
+              <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-500 text-lg font-bold">
+                1
+              </div>
+              <h3 className="text-lg font-semibold">Dados do Google</h3>
+              <p className="text-sm text-zinc-400 leading-relaxed">
+                Todos os preços são coletados de informações publicamente disponíveis
+                no Google Shopping e nas próprias lojas. Nenhum dado privado é acessado.
+              </p>
+            </div>
+            <div className="bg-[#141414] border border-[#262626] rounded-xl p-6 space-y-3">
+              <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-500 text-lg font-bold">
+                2
+              </div>
+              <h3 className="text-lg font-semibold">Atualização automática</h3>
+              <p className="text-sm text-zinc-400 leading-relaxed">
+                Um crawler roda a cada 6 horas, visitando as páginas públicas das lojas
+                e atualizando os preços automaticamente via API.
+              </p>
+            </div>
+            <div className="bg-[#141414] border border-[#262626] rounded-xl p-6 space-y-3">
+              <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-500 text-lg font-bold">
+                3
+              </div>
+              <h3 className="text-lg font-semibold">API REST simples</h3>
+              <p className="text-sm text-zinc-400 leading-relaxed">
+                Consulte preços, filtre por marca e compare produtos com uma única
+                chamada. Documentação completa disponível em /docs.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-16 px-4 border-t border-[#262626]">
+        <div className="max-w-2xl mx-auto bg-[#141414] border border-[#262626] rounded-xl p-8 text-center space-y-4">
+          <div className="inline-flex items-center gap-2 text-xs font-medium text-emerald-500 bg-emerald-500/10 px-3 py-1 rounded-full">
+            Projeto educacional
+          </div>
+          <h3 className="text-xl font-semibold">Sobre este projeto</h3>
+          <p className="text-sm text-zinc-400 leading-relaxed max-w-lg mx-auto">
+            O potebarato foi criado com fins <strong className="text-zinc-300">exclusivamente educacionais</strong> como
+            um estudo de web scraping, APIs REST e comparação de preços.
+            Todos os dados exibidos são <strong className="text-zinc-300">públicos</strong>, coletados diretamente
+            das páginas das lojas indexadas pelo Google. Este projeto não possui fins comerciais
+            e não armazena dados pessoais de terceiros.
+          </p>
+        </div>
+      </section>
+
       <footer className="text-center py-6 text-sm text-zinc-600 border-t border-[#262626]">
-        potebarato &copy; {new Date().getFullYear()}
+        <p>potebarato &copy; {new Date().getFullYear()}</p>
+        <p className="mt-1 text-zinc-700 text-xs">
+          Projeto educacional — dados publicamente disponíveis
+        </p>
       </footer>
     </div>
   );

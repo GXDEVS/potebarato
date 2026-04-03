@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { db } from "@/db";
 import { products } from "@/db/schema";
-import { max, count } from "drizzle-orm";
+import { max, count, desc } from "drizzle-orm";
 
 const app = new Hono();
 
@@ -39,6 +39,26 @@ app.get("/api/scrape/status", async (c) => {
     total_products: stats?.total ?? 0,
     last_update: stats?.lastUpdate?.toISOString() ?? null,
   });
+});
+
+// Public — products for landing page
+app.get("/api/landing/products", async (c) => {
+  const data = await db
+    .select({
+      id: products.id,
+      brand: products.brand,
+      productName: products.productName,
+      totalPrice: products.totalPrice,
+      weightGrams: products.weightGrams,
+      pricePerGram: products.pricePerGram,
+      inStock: products.inStock,
+      url: products.url,
+      imageUrl: products.imageUrl,
+    })
+    .from(products)
+    .orderBy(desc(products.lastUpdate));
+
+  return c.json(data);
 });
 
 export { app as scrapeRoute };
