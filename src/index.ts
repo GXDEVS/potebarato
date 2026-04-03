@@ -1,8 +1,14 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { auth } from "@/lib/auth";
+import { setupOpenAPI } from "@/lib/openapi";
 import { productsRoute } from "@/routes/products";
 import { scrapeRoute } from "@/routes/scrape";
+import { keysRoute } from "@/routes/keys";
+
+import landing from "@/frontend/landing.html";
+import authPage from "@/frontend/auth.html";
+import dashboard from "@/frontend/dashboard.html";
 
 const app = new Hono<{
   Variables: {
@@ -42,13 +48,23 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => {
   return auth.handler(c.req.raw);
 });
 
-// Routes
+// API Routes
 app.route("/", productsRoute);
 app.route("/", scrapeRoute);
+app.route("/", keysRoute);
 
-app.get("/", (c) => c.text("potebarato API"));
+// OpenAPI + Scalar
+setupOpenAPI(app);
 
 // Register cron job (every 6 hours)
 await Bun.cron(`${import.meta.dir}/scraper/worker.ts`, "0 */6 * * *", "potebarato-scraper");
 
-export default app;
+export default {
+  port: 3000,
+  fetch: app.fetch,
+  routes: {
+    "/": landing,
+    "/auth": authPage,
+    "/dashboard": dashboard,
+  },
+};

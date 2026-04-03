@@ -12,5 +12,13 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
-  plugins: [apiKey()],
+  plugins: [
+    apiKey({
+      rateLimit: {
+        enabled: true,
+        timeWindow: 1000 * 60 * 60, // 1 hour
+        maxRequests: 100,
+      },
+    }),
+  ],
 });

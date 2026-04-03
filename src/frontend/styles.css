@@ -1,0 +1,35 @@
+@import url("https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4");
+
+:root {
+  --bg: #0a0a0a;
+  --card: #141414;
+  --border: #262626;
+  --accent: #10b981;
+  --accent-hover: #059669;
+  --text: #fafafa;
+  --text-secondary: #a1a1aa;
+  --danger: #ef4444;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Inter", sans-serif;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
