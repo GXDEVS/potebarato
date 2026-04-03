@@ -1,0 +1,28 @@
+{
+  "name": "potebarato",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "db:generate": "bunx drizzle-kit generate",
+    "db:migrate": "bunx drizzle-kit migrate",
+    "db:push": "bunx drizzle-kit push",
+    "db:studio": "bunx drizzle-kit studio"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "drizzle-kit": "^0.31.10"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@better-auth/api-key": "^1.5.6",
+    "better-auth": "^1.5.6",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.10",
+    "playwright": "^1.59.1",
+    "postgres": "^3.4.8"
+  }
+}

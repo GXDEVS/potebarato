@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: potebarato-db
+    ports:
+      - "5432:5432" # alterar porta
+    environment:
+      POSTGRES_USER: potebarato
+      POSTGRES_PASSWORD: potebarato
+      POSTGRES_DB: potebarato
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
