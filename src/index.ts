@@ -1,3 +1,4 @@
+import "@/lib/env";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { eq } from "drizzle-orm";
@@ -60,8 +61,14 @@ app.route("/", keysRoute);
 // OpenAPI + Scalar
 setupOpenAPI(app);
 
-// Register cron job (every 6 hours)
-await Bun.cron(`${import.meta.dir}/scraper/worker.ts`, "0 */6 * * *", "potebarato-scraper");
+// Scraper cron: every 6 hours
+const SIX_HOURS = 6 * 60 * 60 * 1000;
+setInterval(() => {
+  Bun.spawn(["bun", "run", `${import.meta.dir}/scraper/worker.ts`], {
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+}, SIX_HOURS);
 
 // Custom fetch handler to intercept WebSocket upgrades
 const honoFetch = app.fetch;
