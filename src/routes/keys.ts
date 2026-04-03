@@ -68,6 +68,8 @@ app.get(
         enabled: k.enabled ?? true,
         rateLimitMax: k.rateLimitMax,
         remaining: k.remaining,
+        requestCount: k.requestCount,
+        lastRequest: k.lastRequest?.toISOString() ?? null,
         createdAt: k.createdAt.toISOString(),
       })),
     });

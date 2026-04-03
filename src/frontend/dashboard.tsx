@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import { authClient } from "../lib/auth-client";
 
@@ -10,6 +10,8 @@ interface ApiKey {
   enabled: boolean;
   rateLimitMax: number | null;
   remaining: number | null;
+  requestCount: number | null;
+  lastRequest: string | null;
   createdAt: string;
 }
 
@@ -18,7 +20,7 @@ function Dashboard() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [newKey, setNewKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -27,13 +29,7 @@ function Dashboard() {
     }
   }, [session, isPending]);
 
-  useEffect(() => {
-    if (session) {
-      fetchKeys();
-    }
-  }, [session]);
-
-  const fetchKeys = async () => {
+  const fetchKeys = useCallback(async () => {
     try {
       const res = await fetch("/api/keys", { credentials: "include" });
       if (res.ok) {
@@ -43,7 +39,21 @@ function Dashboard() {
     } catch {
       setKeys([]);
     }
-  };
+  }, []);
+
+  // Initial fetch
+  useEffect(() => {
+    if (session) {
+      fetchKeys();
+    }
+  }, [session, fetchKeys]);
+
+  // Polling every 10s
+  useEffect(() => {
+    if (!session) return;
+    const interval = setInterval(fetchKeys, 10_000);
+    return () => clearInterval(interval);
+  }, [session, fetchKeys]);
 
   const createKey = async () => {
     if (loading || keys.length > 0) return;
@@ -77,10 +87,10 @@ function Dashboard() {
     await fetchKeys();
   };
 
-  const copyKey = async (key: string) => {
-    await navigator.clipboard.writeText(key);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyToClipboard = async (text: string, id: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopied(id);
+    setTimeout(() => setCopied(null), 2000);
   };
 
   const logout = async () => {
@@ -99,7 +109,10 @@ function Dashboard() {
   const activeKey = keys.find((k) => k.enabled);
   const remaining = activeKey?.remaining ?? 0;
   const max = activeKey?.rateLimitMax ?? 100;
-  const usagePercent = max > 0 ? (remaining / max) * 100 : 0;
+  const used = max - remaining;
+  const usagePercent = max > 0 ? (used / max) * 100 : 0;
+
+  const curlCommand = `curl -H "x-api-key: SUA_KEY" \\\n  ${window.location.origin}/api/products`;
 
   return (
     <div className="min-h-screen">
@@ -131,10 +144,10 @@ function Dashboard() {
                 {newKey}
               </code>
               <button
-                onClick={() => copyKey(newKey)}
+                onClick={() => copyToClipboard(newKey, "newkey")}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm transition shrink-0"
               >
-                {copied ? "Copiado!" : "Copiar"}
+                {copied === "newkey" ? "Copiado!" : "Copiar"}
               </button>
             </div>
           </div>
@@ -174,19 +187,19 @@ function Dashboard() {
 
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-zinc-400">Uso</span>
+                  <span className="text-zinc-400">Uso nesta hora</span>
                   <span className="text-zinc-400">
-                    {remaining}/{max} requests restantes
+                    {used}/{max} requests usados
                   </span>
                 </div>
                 <div className="w-full bg-[#262626] rounded-full h-2">
                   <div
-                    className="bg-emerald-500 h-2 rounded-full transition-all"
-                    style={{ width: `${usagePercent}%` }}
+                    className={`h-2 rounded-full transition-all ${usagePercent > 80 ? "bg-red-500" : "bg-emerald-500"}`}
+                    style={{ width: `${Math.min(usagePercent, 100)}%` }}
                   />
                 </div>
                 <p className="text-xs text-zinc-600">
-                  Reseta a cada 1 hora &middot; Limite: {max} requests/hora
+                  {remaining} restantes &middot; Reseta a cada 1 hora &middot; Limite: {max}/hora
                 </p>
               </div>
             </div>
@@ -205,10 +218,17 @@ function Dashboard() {
         </div>
 
         <div className="bg-[#141414] border border-[#262626] rounded-xl p-6 space-y-3">
-          <h2 className="text-lg font-semibold">Quick Start</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Quick Start</h2>
+            <button
+              onClick={() => copyToClipboard(curlCommand, "curl")}
+              className="text-sm bg-[#262626] hover:bg-[#333] text-zinc-300 px-3 py-1.5 rounded-lg transition"
+            >
+              {copied === "curl" ? "Copiado!" : "Copiar"}
+            </button>
+          </div>
           <pre className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-4 text-sm font-mono text-zinc-300 overflow-x-auto">
-{`curl -H "x-api-key: SUA_KEY" \\
-  ${window.location.origin}/api/products`}
+{curlCommand}
           </pre>
         </div>
       </main>
