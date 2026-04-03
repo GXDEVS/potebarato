@@ -13,8 +13,6 @@ const KeySchema = z.object({
   start: z.string().nullable(),
   prefix: z.string().nullable(),
   enabled: z.boolean(),
-  rateLimitMax: z.number().nullable(),
-  remaining: z.number().nullable(),
   createdAt: z.string(),
 });
 
@@ -28,12 +26,12 @@ function getUserId(c: any): string | null {
 app.get(
   "/api/keys",
   describeRoute({
-    tags: ["API Keys"],
-    summary: "List your API keys",
-    description: "Returns all API keys for the authenticated user.",
+    tags: ["Chaves de API"],
+    summary: "Listar suas chaves de API",
+    description: "Retorna todas as chaves de API do usuário autenticado.",
     responses: {
       200: {
-        description: "List of API keys",
+        description: "Lista de chaves",
         content: {
           "application/json": {
             schema: resolver(z.object({ keys: z.array(KeySchema) })),
@@ -41,7 +39,7 @@ app.get(
         },
       },
       401: {
-        description: "Unauthorized",
+        description: "Não autorizado",
         content: {
           "application/json": { schema: resolver(ErrorSchema) },
         },
@@ -51,7 +49,7 @@ app.get(
   async (c) => {
     const userId = getUserId(c);
     if (!userId) {
-      return c.json({ error: "Unauthorized" }, 401);
+      return c.json({ error: "Não autorizado" }, 401);
     }
 
     const keys = await db
@@ -66,10 +64,6 @@ app.get(
         start: k.start,
         prefix: k.prefix,
         enabled: k.enabled ?? true,
-        rateLimitMax: k.rateLimitMax,
-        remaining: k.remaining,
-        requestCount: k.requestCount,
-        lastRequest: k.lastRequest?.toISOString() ?? null,
         createdAt: k.createdAt.toISOString(),
       })),
     });
@@ -79,13 +73,13 @@ app.get(
 app.post(
   "/api/keys",
   describeRoute({
-    tags: ["API Keys"],
-    summary: "Create a new API key",
+    tags: ["Chaves de API"],
+    summary: "Criar uma nova chave de API",
     description:
-      "Creates a new API key with rate limiting (100 req/hour). Returns the full key — store it securely, it won't be shown again.",
+      "Cria uma nova chave de API. Limite de 1 por usuário. Copie a chave imediatamente — ela não será exibida novamente.",
     responses: {
       200: {
-        description: "API key created",
+        description: "Chave criada",
         content: {
           "application/json": {
             schema: resolver(z.object({ key: z.string(), id: z.string() })),
@@ -93,13 +87,13 @@ app.post(
         },
       },
       400: {
-        description: "Already has a key",
+        description: "Usuário já possui uma chave",
         content: {
           "application/json": { schema: resolver(ErrorSchema) },
         },
       },
       401: {
-        description: "Unauthorized",
+        description: "Não autorizado",
         content: {
           "application/json": { schema: resolver(ErrorSchema) },
         },
@@ -109,7 +103,7 @@ app.post(
   async (c) => {
     const userId = getUserId(c);
     if (!userId) {
-      return c.json({ error: "Unauthorized" }, 401);
+      return c.json({ error: "Não autorizado" }, 401);
     }
 
     const existing = await db
@@ -143,12 +137,12 @@ app.post(
 app.delete(
   "/api/keys/:id",
   describeRoute({
-    tags: ["API Keys"],
-    summary: "Revoke an API key",
-    description: "Permanently deletes an API key.",
+    tags: ["Chaves de API"],
+    summary: "Revogar uma chave de API",
+    description: "Remove permanentemente uma chave de API.",
     responses: {
       200: {
-        description: "Key revoked",
+        description: "Chave revogada",
         content: {
           "application/json": {
             schema: resolver(z.object({ success: z.boolean() })),
@@ -156,7 +150,13 @@ app.delete(
         },
       },
       401: {
-        description: "Unauthorized",
+        description: "Não autorizado",
+        content: {
+          "application/json": { schema: resolver(ErrorSchema) },
+        },
+      },
+      404: {
+        description: "Chave não encontrada",
         content: {
           "application/json": { schema: resolver(ErrorSchema) },
         },
@@ -166,12 +166,11 @@ app.delete(
   async (c) => {
     const userId = getUserId(c);
     if (!userId) {
-      return c.json({ error: "Unauthorized" }, 401);
+      return c.json({ error: "Não autorizado" }, 401);
     }
 
     const id = c.req.param("id");
 
-    // Verify the key belongs to this user
     const [key] = await db
       .select({ id: apikey.id })
       .from(apikey)
@@ -179,7 +178,7 @@ app.delete(
       .limit(1);
 
     if (!key) {
-      return c.json({ error: "Key not found" }, 404);
+      return c.json({ error: "Chave não encontrada" }, 404);
     }
 
     await auth.api.deleteApiKey({

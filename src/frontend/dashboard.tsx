@@ -8,10 +8,6 @@ interface ApiKey {
   start: string | null;
   prefix: string | null;
   enabled: boolean;
-  rateLimitMax: number | null;
-  remaining: number | null;
-  requestCount: number | null;
-  lastRequest: string | null;
   createdAt: string;
 }
 
@@ -19,6 +15,25 @@ interface Usage {
   used: number;
   max: number;
   remaining: number;
+}
+
+interface ScrapeStatus {
+  total_products: number;
+  last_update: string | null;
+}
+
+const CRON_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+function getNextCronRun(lastUpdate: string | null): string {
+  if (!lastUpdate) return "Aguardando primeiro scraping";
+  const last = new Date(lastUpdate);
+  const next = new Date(last.getTime() + CRON_INTERVAL_MS);
+  const now = new Date();
+  if (next <= now) return "Em breve";
+  const diff = next.getTime() - now.getTime();
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  return `em ${h}h ${m}min`;
 }
 
 function Dashboard() {
@@ -30,6 +45,13 @@ function Dashboard() {
   const [error, setError] = useState("");
   const [usage, setUsage] = useState<Usage | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+
+  // Admin state
+  const [scrapeStatus, setScrapeStatus] = useState<ScrapeStatus | null>(null);
+  const [scraping, setScraping] = useState(false);
+  const [scrapeMsg, setScrapeMsg] = useState("");
+
+  const isAdmin = (session?.user as any)?.role === "admin";
 
   useEffect(() => {
     if (!isPending && !session) {
@@ -49,14 +71,30 @@ function Dashboard() {
     }
   }, []);
 
-  // Initial fetch
+  const fetchScrapeStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/scrape/status", { credentials: "include" });
+      if (res.ok) {
+        setScrapeStatus(await res.json());
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     if (session) {
       fetchKeys();
+      if (isAdmin) fetchScrapeStatus();
     }
-  }, [session, fetchKeys]);
+  }, [session, fetchKeys, fetchScrapeStatus, isAdmin]);
 
-  // WebSocket connection for real-time usage (by userId)
+  // Poll scrape status every 30s for admin
+  useEffect(() => {
+    if (!isAdmin) return;
+    const interval = setInterval(fetchScrapeStatus, 30_000);
+    return () => clearInterval(interval);
+  }, [isAdmin, fetchScrapeStatus]);
+
+  // WebSocket for real-time usage
   useEffect(() => {
     if (!session?.user?.id || keys.length === 0) {
       setUsage(null);
@@ -76,9 +114,7 @@ function Dashboard() {
       } catch {}
     };
 
-    ws.onclose = () => {
-      wsRef.current = null;
-    };
+    ws.onclose = () => { wsRef.current = null; };
 
     return () => {
       ws.close();
@@ -91,10 +127,7 @@ function Dashboard() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/keys", {
-        method: "POST",
-        credentials: "include",
-      });
+      const res = await fetch("/api/keys", { method: "POST", credentials: "include" });
       const data = await res.json();
       if (res.ok) {
         setNewKey(data.key);
@@ -110,13 +143,30 @@ function Dashboard() {
   };
 
   const revokeKey = async (id: string) => {
-    await fetch(`/api/keys/${id}`, {
-      method: "DELETE",
-      credentials: "include",
-    });
+    await fetch(`/api/keys/${id}`, { method: "DELETE", credentials: "include" });
     setNewKey(null);
     setUsage(null);
     await fetchKeys();
+  };
+
+  const triggerScrape = async () => {
+    setScraping(true);
+    setScrapeMsg("");
+    try {
+      const res = await fetch("/api/scrape", { method: "POST", credentials: "include" });
+      const data = await res.json();
+      if (res.ok) {
+        setScrapeMsg(`Scraping iniciado (PID: ${data.pid})`);
+        // Refresh status after a delay
+        setTimeout(fetchScrapeStatus, 5000);
+      } else {
+        setScrapeMsg(data.error ?? "Erro ao iniciar scraping");
+      }
+    } catch {
+      setScrapeMsg("Erro de conexão");
+    } finally {
+      setScraping(false);
+    }
   };
 
   const copyToClipboard = async (text: string, id: string) => {
@@ -154,6 +204,11 @@ function Dashboard() {
           pote<span className="text-emerald-500">barato</span>
         </a>
         <div className="flex items-center gap-4">
+          {isAdmin && (
+            <span className="text-xs bg-emerald-900 text-emerald-400 px-2 py-0.5 rounded">
+              Admin
+            </span>
+          )}
           <span className="text-sm text-zinc-400">{session?.user?.name}</span>
           <button
             onClick={logout}
@@ -166,6 +221,63 @@ function Dashboard() {
 
       <main className="max-w-2xl mx-auto px-4 py-12 space-y-6">
         <h1 className="text-2xl font-bold">Dashboard</h1>
+
+        {/* Admin: Scraping Panel */}
+        {isAdmin && (
+          <div className="bg-[#141414] border border-emerald-900 rounded-xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                Scraping
+                <span className="text-xs bg-emerald-900 text-emerald-400 px-2 py-0.5 rounded">
+                  Admin
+                </span>
+              </h2>
+              <button
+                onClick={triggerScrape}
+                disabled={scraping}
+                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
+              >
+                {scraping ? "Iniciando..." : "Iniciar Scraping"}
+              </button>
+            </div>
+
+            {scrapeMsg && (
+              <p className={`text-sm ${scrapeMsg.includes("Erro") ? "text-red-400" : "text-emerald-400"}`}>
+                {scrapeMsg}
+              </p>
+            )}
+
+            {scrapeStatus && (
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-emerald-500">
+                    {scrapeStatus.total_products}
+                  </div>
+                  <div className="text-xs text-zinc-500">Produtos</div>
+                </div>
+                <div className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-3 text-center">
+                  <div className="text-sm font-medium text-zinc-300">
+                    {scrapeStatus.last_update
+                      ? new Date(scrapeStatus.last_update).toLocaleString("pt-BR", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : "Nunca"}
+                  </div>
+                  <div className="text-xs text-zinc-500">Última atualização</div>
+                </div>
+                <div className="bg-[#0a0a0a] border border-[#262626] rounded-lg p-3 text-center">
+                  <div className="text-sm font-medium text-zinc-300">
+                    {getNextCronRun(scrapeStatus.last_update)}
+                  </div>
+                  <div className="text-xs text-zinc-500">Próximo cron</div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {newKey && (
           <div className="bg-emerald-950 border border-emerald-800 rounded-xl p-4 space-y-2">
@@ -200,6 +312,7 @@ function Dashboard() {
           </div>
         )}
 
+        {/* API Key Card */}
         <div className="bg-[#141414] border border-[#262626] rounded-xl p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">API Key</h2>
@@ -259,6 +372,7 @@ function Dashboard() {
           )}
         </div>
 
+        {/* Quick Start */}
         <div className="bg-[#141414] border border-[#262626] rounded-xl p-6 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Quick Start</h2>

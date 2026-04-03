@@ -11,12 +11,19 @@ export function setupOpenAPI(app: Hono<any>) {
           title: "potebarato API",
           version: "1.0.0",
           description:
-            "API de comparação de preços de creatina em lojas de suplementos brasileiras.",
+            "API de comparação de preços de creatina em lojas de suplementos brasileiras. Dados atualizados automaticamente a cada 6 horas.",
         },
         tags: [
-          { name: "Products", description: "Creatina product data" },
-          { name: "Scraper", description: "Scraping pipeline control" },
-          { name: "API Keys", description: "API key management" },
+          {
+            name: "Produtos",
+            description:
+              "Consulte preços de creatina de diversas lojas. Filtre por marca ou nome do produto.",
+          },
+          {
+            name: "Chaves de API",
+            description:
+              "Gerencie suas chaves de acesso. Cada usuário pode ter uma chave ativa com limite de 100 requisições por hora.",
+          },
         ],
         components: {
           securitySchemes: {
@@ -24,7 +31,7 @@ export function setupOpenAPI(app: Hono<any>) {
               type: "apiKey",
               in: "header",
               name: "x-api-key",
-              description: "Your API key for accessing product data",
+              description: "Sua chave de API para acessar os dados de produtos",
             },
           },
         },

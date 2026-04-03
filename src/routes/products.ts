@@ -12,13 +12,13 @@ const app = new Hono();
 app.get(
   "/api/products",
   describeRoute({
-    tags: ["Products"],
-    summary: "List creatina products",
+    tags: ["Produtos"],
+    summary: "Listar produtos de creatina",
     description:
-      "Returns all creatina products with prices. Supports filtering by brand or product name. Requires a valid API key via x-api-key header.",
+      "Retorna todos os produtos de creatina com preços. Suporta filtro por marca ou nome do produto. Requer uma chave de API válida via header x-api-key.",
     responses: {
       200: {
-        description: "List of products",
+        description: "Lista de produtos",
         content: {
           "application/json": {
             schema: resolver(ProductsResponseSchema),
@@ -26,7 +26,7 @@ app.get(
         },
       },
       401: {
-        description: "API key required or invalid",
+        description: "Chave de API ausente ou inválida",
         content: {
           "application/json": {
             schema: resolver(ErrorSchema),
@@ -34,7 +34,7 @@ app.get(
         },
       },
       429: {
-        description: "Rate limit exceeded",
+        description: "Limite de requisições excedido",
         content: {
           "application/json": {
             schema: resolver(ErrorSchema),
