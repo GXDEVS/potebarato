@@ -84,6 +84,14 @@ app.post(
       return c.json({ error: "Unauthorized" }, 401);
     }
 
+    const existing = await auth.api.listApiKeys({
+      headers: c.req.raw.headers,
+    });
+    const list = Array.isArray(existing) ? existing : [];
+    if (list.length > 0) {
+      return c.json({ error: "Você já possui uma API key. Revogue a existente para criar uma nova." }, 400);
+    }
+
     const result = await auth.api.createApiKey({
       body: {
         name: "potebarato-key",
