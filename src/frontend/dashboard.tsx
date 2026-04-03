@@ -9,28 +9,8 @@ interface ApiKey {
   prefix: string | null;
   enabled: boolean;
   rateLimitMax: number | null;
-  rateLimitEnabled: boolean | null;
   remaining: number | null;
-  requestCount: number | null;
-  lastRefillAt: string | null;
   createdAt: string;
-  [key: string]: unknown;
-}
-
-function normalizeKey(raw: Record<string, unknown>): ApiKey {
-  return {
-    id: String(raw.id ?? ""),
-    name: raw.name != null ? String(raw.name) : null,
-    start: raw.start != null ? String(raw.start) : null,
-    prefix: raw.prefix != null ? String(raw.prefix) : null,
-    enabled: raw.enabled !== false,
-    rateLimitMax: raw.rateLimitMax != null ? Number(raw.rateLimitMax) : (raw.rate_limit_max != null ? Number(raw.rate_limit_max) : null),
-    rateLimitEnabled: raw.rateLimitEnabled != null ? Boolean(raw.rateLimitEnabled) : (raw.rate_limit_enabled != null ? Boolean(raw.rate_limit_enabled) : null),
-    remaining: raw.remaining != null ? Number(raw.remaining) : null,
-    requestCount: raw.requestCount != null ? Number(raw.requestCount) : (raw.request_count != null ? Number(raw.request_count) : null),
-    lastRefillAt: raw.lastRefillAt != null ? String(raw.lastRefillAt) : (raw.last_refill_at != null ? String(raw.last_refill_at) : null),
-    createdAt: String(raw.createdAt ?? raw.created_at ?? ""),
-  };
 }
 
 function Dashboard() {
@@ -58,8 +38,7 @@ function Dashboard() {
       const res = await fetch("/api/keys", { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
-        const raw = Array.isArray(data) ? data : Array.isArray(data?.keys) ? data.keys : [];
-        setKeys(raw.map(normalizeKey));
+        setKeys(Array.isArray(data?.keys) ? data.keys : []);
       }
     } catch {
       setKeys([]);
@@ -67,6 +46,7 @@ function Dashboard() {
   };
 
   const createKey = async () => {
+    if (loading || keys.length > 0) return;
     setLoading(true);
     setError("");
     try {
@@ -120,7 +100,6 @@ function Dashboard() {
   const remaining = activeKey?.remaining ?? 0;
   const max = activeKey?.rateLimitMax ?? 100;
   const usagePercent = max > 0 ? (remaining / max) * 100 : 0;
-  const hasKey = keys.length > 0;
 
   return (
     <div className="min-h-screen">
@@ -213,20 +192,14 @@ function Dashboard() {
             </div>
           ) : (
             <div className="text-center py-6 space-y-3">
-              <p className="text-zinc-400">
-                {hasKey
-                  ? "Sua API key está desativada."
-                  : "Você ainda não tem uma API key."}
-              </p>
-              {!hasKey && (
-                <button
-                  onClick={createKey}
-                  disabled={loading}
-                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl font-medium transition"
-                >
-                  {loading ? "Criando..." : "Gerar API Key"}
-                </button>
-              )}
+              <p className="text-zinc-400">Você ainda não tem uma API key.</p>
+              <button
+                onClick={createKey}
+                disabled={loading}
+                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl font-medium transition"
+              >
+                {loading ? "Criando..." : "Gerar API Key"}
+              </button>
             </div>
           )}
         </div>

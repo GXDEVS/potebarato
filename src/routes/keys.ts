@@ -1,21 +1,29 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import z from "zod";
+import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
+import { db } from "@/db";
+import { apikey } from "@/db/auth-schema";
 import { ErrorSchema } from "@/lib/schemas";
 
 const KeySchema = z.object({
   id: z.string(),
   name: z.string().nullable(),
   start: z.string().nullable(),
+  prefix: z.string().nullable(),
   enabled: z.boolean(),
   rateLimitMax: z.number().nullable(),
   remaining: z.number().nullable(),
-  lastRefillAt: z.string().nullable(),
   createdAt: z.string(),
 });
 
 const app = new Hono();
+
+function getUserId(c: any): string | null {
+  const user = c.get("user");
+  return user?.id ?? null;
+}
 
 app.get(
   "/api/keys",
@@ -41,16 +49,28 @@ app.get(
     },
   }),
   async (c) => {
-    const session = c.get("session" as never) as { userId: string } | null;
-    if (!session) {
+    const userId = getUserId(c);
+    if (!userId) {
       return c.json({ error: "Unauthorized" }, 401);
     }
 
-    const keys = await auth.api.listApiKeys({
-      headers: c.req.raw.headers,
-    });
+    const keys = await db
+      .select()
+      .from(apikey)
+      .where(eq(apikey.referenceId, userId));
 
-    return c.json({ keys });
+    return c.json({
+      keys: keys.map((k) => ({
+        id: k.id,
+        name: k.name,
+        start: k.start,
+        prefix: k.prefix,
+        enabled: k.enabled ?? true,
+        rateLimitMax: k.rateLimitMax,
+        remaining: k.remaining,
+        createdAt: k.createdAt.toISOString(),
+      })),
+    });
   }
 );
 
@@ -70,6 +90,12 @@ app.post(
           },
         },
       },
+      400: {
+        description: "Already has a key",
+        content: {
+          "application/json": { schema: resolver(ErrorSchema) },
+        },
+      },
       401: {
         description: "Unauthorized",
         content: {
@@ -79,17 +105,22 @@ app.post(
     },
   }),
   async (c) => {
-    const session = c.get("session" as never) as { userId: string } | null;
-    if (!session) {
+    const userId = getUserId(c);
+    if (!userId) {
       return c.json({ error: "Unauthorized" }, 401);
     }
 
-    const existing = await auth.api.listApiKeys({
-      headers: c.req.raw.headers,
-    });
-    const list = Array.isArray(existing) ? existing : [];
-    if (list.length > 0) {
-      return c.json({ error: "Você já possui uma API key. Revogue a existente para criar uma nova." }, 400);
+    const existing = await db
+      .select({ id: apikey.id })
+      .from(apikey)
+      .where(eq(apikey.referenceId, userId))
+      .limit(1);
+
+    if (existing.length > 0) {
+      return c.json(
+        { error: "Você já possui uma API key. Revogue a existente para criar uma nova." },
+        400
+      );
     }
 
     const result = await auth.api.createApiKey({
@@ -131,12 +162,23 @@ app.delete(
     },
   }),
   async (c) => {
-    const session = c.get("session" as never) as { userId: string } | null;
-    if (!session) {
+    const userId = getUserId(c);
+    if (!userId) {
       return c.json({ error: "Unauthorized" }, 401);
     }
 
     const id = c.req.param("id");
+
+    // Verify the key belongs to this user
+    const [key] = await db
+      .select({ id: apikey.id })
+      .from(apikey)
+      .where(eq(apikey.id, id))
+      .limit(1);
+
+    if (!key) {
+      return c.json({ error: "Key not found" }, 404);
+    }
 
     await auth.api.deleteApiKey({
       body: { keyId: id },
