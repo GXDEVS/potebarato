@@ -1,11 +1,12 @@
 import { chromium, type Browser, type Page } from "playwright";
 import type { SiteConfig, ProductData } from "./types";
 
-const POOL_SIZE = 3;
-const PAGE_TIMEOUT = 45_000;
-const MAX_RETRIES = 2;
-const MIN_DELAY = 1000;
-const MAX_DELAY = 3000;
+// Configuracoes do pool de scraping e limites de retry
+const POOL_SIZE = 3;         // Paginas simultaneas por site
+const PAGE_TIMEOUT = 45_000; // Timeout de navegacao (ms)
+const MAX_RETRIES = 2;       // Tentativas apos falha
+const MIN_DELAY = 1000;      // Delay minimo entre paginas (ms)
+const MAX_DELAY = 3000;      // Delay maximo entre paginas (ms)
 
 interface JsonLdExtracted {
   name: string;
@@ -16,6 +17,7 @@ interface JsonLdExtracted {
   imageUrl: string | null;
 }
 
+/** Converte preco no formato brasileiro (R$1.299,00) para number */
 export function parsePrice(raw: string): number {
   let cleaned = raw.replace(/R\$\s*/g, "").trim();
   cleaned = cleaned.replace(/\s+\d+%.*$/i, "").trim();
@@ -25,6 +27,7 @@ export function parsePrice(raw: string): number {
   return parseFloat(cleaned);
 }
 
+/** Extrai peso em gramas do nome do produto (ex: "Creatina 1Kg" → 1000, "500g" → 500) */
 export function extractWeightGrams(name: string): number | null {
   const kgMatch = name.match(/(\d+(?:[.,]\d+)?)\s*kg/i);
   if (kgMatch) {
@@ -78,6 +81,7 @@ function extractFromProductGroup(data: Record<string, unknown>): JsonLdExtracted
   };
 }
 
+/** Seleciona a funcao de extracao correta baseado na estrategia do site */
 function matchJsonLdItem(
   data: Record<string, unknown>,
   strategy: SiteConfig["jsonLdStrategy"]
@@ -91,6 +95,7 @@ function matchJsonLdItem(
   return null;
 }
 
+/** Percorre todos os blocos JSON-LD da pagina e extrai dados do produto */
 export function extractJsonLdProduct(
   scripts: string[],
   strategy: SiteConfig["jsonLdStrategy"]
@@ -127,21 +132,18 @@ function randomDelay(): Promise<void> {
  * 4. First product img tag on the page
  */
 async function fallbackImageUrl(page: Page, url: string): Promise<string | null> {
-  // 1. og:image
   const ogImage = await page.$eval(
     'meta[property="og:image"]',
     (el) => el.getAttribute("content")
   ).catch(() => null);
   if (ogImage) return ogImage;
 
-  // 2. twitter:image or og:image:secure_url
   const twitterImage = await page.$eval(
     'meta[property="og:image:secure_url"], meta[name="twitter:image"]',
     (el) => el.getAttribute("content")
   ).catch(() => null);
   if (twitterImage) return twitterImage;
 
-  // 3. Shopify .json API — works for /products/<handle> URLs
   const shopifyMatch = url.match(/\/products\/([^/?#]+)/);
   if (shopifyMatch) {
     try {
@@ -157,11 +159,10 @@ async function fallbackImageUrl(page: Page, url: string): Promise<string | null>
         if (src) return src;
       }
     } catch {
-      // ignore, try next fallback
+      // fallback seguinte
     }
   }
 
-  // 4. First product image on the page
   const imgSrc = await page.$eval(
     'img[src*="product"], img[src*="cdn.shopify"], img[src*="upload/produto"]',
     (el) => (el as HTMLImageElement).src
@@ -170,7 +171,7 @@ async function fallbackImageUrl(page: Page, url: string): Promise<string | null>
   return imgSrc;
 }
 
-/** Thrown when a product is valid but not relevant (e.g. no weight) — should NOT be retried */
+/** Produto valido mas sem peso extraivel — nao deve ser retentado */
 class SkipProductError extends Error {
   constructor(message: string) {
     super(message);
@@ -225,7 +226,6 @@ async function scrapePage(
     imageUrl = null;
   }
 
-  // Image fallback cascade when JSON-LD didn't provide one
   if (!imageUrl) {
     imageUrl = await fallbackImageUrl(page, url);
     if (imageUrl) {

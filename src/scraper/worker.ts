@@ -1,3 +1,7 @@
+/**
+ * Worker de scraping — executado como processo filho a cada 6h.
+ * Para cada site: crawl (descobrir URLs) → scrape (extrair dados) → upsert (salvar no banco).
+ */
 import { SITE_CONFIGS } from "./sites";
 import { crawl } from "./crawler";
 import { scrape } from "./scraper";
