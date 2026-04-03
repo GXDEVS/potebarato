@@ -36,7 +36,30 @@ export function setupOpenAPI(app: Hono<any>) {
     "/docs",
     apiReference({
       url: "/openapi.json",
-      theme: "deepSpace",
+      theme: "none",
+      darkMode: true,
+      customCss: `
+        .dark-mode {
+          --scalar-color-1: #fafafa;
+          --scalar-color-2: rgba(255, 255, 255, 0.62);
+          --scalar-color-3: rgba(255, 255, 255, 0.44);
+          --scalar-color-accent: #10b981;
+          --scalar-background-1: #0a0a0a;
+          --scalar-background-2: #141414;
+          --scalar-background-3: #1e1e1e;
+          --scalar-background-accent: #10b9811a;
+          --scalar-border-color: #262626;
+          --scalar-font: system-ui, -apple-system, "Inter", sans-serif;
+        }
+        .dark-mode .scalar-card {
+          background: #141414;
+          border-color: #262626;
+        }
+        .dark-mode .sidebar {
+          background: #0a0a0a;
+          border-color: #262626;
+        }
+      `,
     })
   );
 }
