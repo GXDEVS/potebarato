@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { authClient } from "../lib/auth-client";
 
@@ -15,6 +15,12 @@ interface ApiKey {
   createdAt: string;
 }
 
+interface Usage {
+  used: number;
+  max: number;
+  remaining: number;
+}
+
 function Dashboard() {
   const { data: session, isPending } = authClient.useSession();
   const [keys, setKeys] = useState<ApiKey[]>([]);
@@ -22,6 +28,8 @@ function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [usage, setUsage] = useState<Usage | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     if (!isPending && !session) {
@@ -48,12 +56,36 @@ function Dashboard() {
     }
   }, [session, fetchKeys]);
 
-  // Polling every 10s
+  // WebSocket connection for real-time usage
   useEffect(() => {
-    if (!session) return;
-    const interval = setInterval(fetchKeys, 10_000);
-    return () => clearInterval(interval);
-  }, [session, fetchKeys]);
+    const activeKey = keys.find((k) => k.enabled);
+    if (!activeKey) {
+      setUsage(null);
+      return;
+    }
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/usage/${activeKey.id}`);
+    wsRef.current = ws;
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "usage") {
+          setUsage({ used: data.used, max: data.max, remaining: data.remaining });
+        }
+      } catch {}
+    };
+
+    ws.onclose = () => {
+      wsRef.current = null;
+    };
+
+    return () => {
+      ws.close();
+      wsRef.current = null;
+    };
+  }, [keys]);
 
   const createKey = async () => {
     if (loading || keys.length > 0) return;
@@ -84,6 +116,7 @@ function Dashboard() {
       credentials: "include",
     });
     setNewKey(null);
+    setUsage(null);
     await fetchKeys();
   };
 
@@ -107,10 +140,11 @@ function Dashboard() {
   }
 
   const activeKey = keys.find((k) => k.enabled);
-  const remaining = activeKey?.remaining ?? 0;
-  const max = activeKey?.rateLimitMax ?? 100;
-  const used = max - remaining;
+  const used = usage?.used ?? 0;
+  const max = usage?.max ?? 100;
+  const remaining = usage?.remaining ?? max;
   const usagePercent = max > 0 ? (used / max) * 100 : 0;
+  const blocked = remaining <= 0 && activeKey != null;
 
   const curlCommand = `curl -H "x-api-key: SUA_KEY" \\\n  ${window.location.origin}/api/products`;
 
@@ -159,6 +193,14 @@ function Dashboard() {
           </div>
         )}
 
+        {blocked && (
+          <div className="bg-red-950 border border-red-800 rounded-xl p-4">
+            <p className="text-sm text-red-400 font-medium">
+              Limite atingido — sua API está bloqueada até o próximo reset (1 hora).
+            </p>
+          </div>
+        )}
+
         <div className="bg-[#141414] border border-[#262626] rounded-xl p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">API Key</h2>
@@ -188,19 +230,20 @@ function Dashboard() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-zinc-400">Uso nesta hora</span>
-                  <span className="text-zinc-400">
+                  <span className={blocked ? "text-red-400 font-medium" : "text-zinc-400"}>
                     {used}/{max} requests usados
                   </span>
                 </div>
                 <div className="w-full bg-[#262626] rounded-full h-2">
                   <div
-                    className={`h-2 rounded-full transition-all ${usagePercent > 80 ? "bg-red-500" : "bg-emerald-500"}`}
+                    className={`h-2 rounded-full transition-all ${blocked ? "bg-red-500" : usagePercent > 80 ? "bg-yellow-500" : "bg-emerald-500"}`}
                     style={{ width: `${Math.min(usagePercent, 100)}%` }}
                   />
                 </div>
-                <p className="text-xs text-zinc-600">
-                  {remaining} restantes &middot; Reseta a cada 1 hora &middot; Limite: {max}/hora
-                </p>
+                <div className="flex justify-between text-xs text-zinc-600">
+                  <span>{remaining} restantes</span>
+                  <span>Reseta a cada 1 hora</span>
+                </div>
               </div>
             </div>
           ) : (

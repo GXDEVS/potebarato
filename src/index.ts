@@ -1,10 +1,14 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { setupOpenAPI } from "@/lib/openapi";
 import { productsRoute } from "@/routes/products";
 import { scrapeRoute } from "@/routes/scrape";
 import { keysRoute } from "@/routes/keys";
+import { subscribe, unsubscribe, getUsage } from "@/lib/rate-limit";
+import { db } from "@/db";
+import { apikey } from "@/db/auth-schema";
 
 import landing from "@/frontend/landing.html";
 import authPage from "@/frontend/auth.html";
@@ -59,12 +63,47 @@ setupOpenAPI(app);
 // Register cron job (every 6 hours)
 await Bun.cron(`${import.meta.dir}/scraper/worker.ts`, "0 */6 * * *", "potebarato-scraper");
 
+// Custom fetch handler to intercept WebSocket upgrades
+const honoFetch = app.fetch;
+
 export default {
   port: 3000,
-  fetch: app.fetch,
+  async fetch(req: Request, server: any) {
+    const url = new URL(req.url);
+
+    // WebSocket upgrade for /ws/usage/:keyId
+    if (url.pathname.startsWith("/ws/usage/")) {
+      const keyId = url.pathname.split("/ws/usage/")[1];
+      if (!keyId) {
+        return new Response("Missing keyId", { status: 400 });
+      }
+      const upgraded = server.upgrade(req, { data: { keyId } });
+      if (upgraded) return undefined;
+      return new Response("WebSocket upgrade failed", { status: 500 });
+    }
+
+    return honoFetch(req, server);
+  },
   routes: {
     "/": landing,
     "/auth": authPage,
     "/dashboard": dashboard,
+  },
+  websocket: {
+    async open(ws: any) {
+      const keyId = ws.data?.keyId;
+      if (keyId) {
+        subscribe(keyId, ws);
+        // Send initial usage
+        const usage = await getUsage(keyId);
+        if (usage) {
+          ws.send(JSON.stringify({ type: "usage", ...usage }));
+        }
+      }
+    },
+    message(_ws: any, _message: any) {},
+    close(ws: any) {
+      unsubscribe(ws);
+    },
   },
 };
