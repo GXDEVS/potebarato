@@ -36,7 +36,8 @@ function Dashboard() {
     const res = await fetch("/api/keys", { credentials: "include" });
     if (res.ok) {
       const data = await res.json();
-      setKeys(data.keys ?? []);
+      const list = Array.isArray(data) ? data : (data.keys ?? []);
+      setKeys(list);
     }
   };
 
