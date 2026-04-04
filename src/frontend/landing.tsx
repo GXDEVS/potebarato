@@ -61,7 +61,7 @@ function ComparePanel({
               </button>
               <div className="w-full h-24 bg-white rounded-lg flex items-center justify-center mb-4">
                 {p.imageUrl ? (
-                  <img src={p.imageUrl} alt={p.productName} className="h-full w-full object-contain p-2 rounded-lg" />
+                  <img src={p.imageUrl} alt={p.productName} className="h-full w-full object-contain p-2 rounded-lg" loading="lazy" />
                 ) : (
                   <span className="text-zinc-400 text-xs">Sem imagem</span>
                 )}
@@ -501,34 +501,154 @@ function Marquee({ products }: { products: Product[] }) {
   );
 }
 
+function MarqueeSkeleton() {
+  return (
+    <div className="marquee-wrapper">
+      <div className="flex gap-4 px-4">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="marquee-card shrink-0 animate-pulse">
+            <div className="marquee-card-image bg-zinc-800" />
+            <div className="marquee-card-body">
+              <div className="h-2.5 w-16 bg-zinc-800 rounded" />
+              <div className="h-3 w-full bg-zinc-800 rounded mt-1" />
+              <div className="h-3 w-3/4 bg-zinc-800 rounded mt-1" />
+              <div className="flex items-baseline gap-2 mt-2">
+                <div className="h-5 w-20 bg-zinc-800 rounded" />
+                <div className="h-3 w-16 bg-zinc-700 rounded" />
+              </div>
+              <div className="h-2.5 w-14 bg-zinc-800 rounded mt-2" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ComparatorSkeleton() {
+  return (
+    <section className="py-20 px-4 border-t border-[#262626]" id="comparador">
+      <div className="max-w-6xl mx-auto">
+        <h2 className="text-3xl font-bold tracking-tight text-center mb-3">
+          Comparador de <span className="text-emerald-500">preços</span>
+        </h2>
+        <p className="text-center text-zinc-400 text-sm mb-10">
+          Encontre a creatina mais barata ou com melhor custo-benefício
+        </p>
+
+        {/* Skeleton filters */}
+        <div className="flex flex-wrap gap-3 mb-8">
+          <div className="flex-1 min-w-[200px] h-[42px] bg-[#141414] border border-[#262626] rounded-lg animate-pulse" />
+          <div className="w-44 h-[42px] bg-[#141414] border border-[#262626] rounded-lg animate-pulse" />
+          <div className="w-36 h-[42px] bg-[#141414] border border-[#262626] rounded-lg animate-pulse" />
+          <div className="w-28 h-[42px] bg-[#141414] border border-[#262626] rounded-lg animate-pulse" />
+        </div>
+
+        {/* Skeleton highlights */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+          {[0, 1].map((i) => (
+            <div key={i} className="bg-[#141414] border border-[#262626] rounded-xl p-5 flex items-center gap-4 animate-pulse">
+              <div className="w-10 h-10 rounded-lg bg-zinc-800 shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="h-2.5 w-20 bg-zinc-800 rounded" />
+                <div className="h-3.5 w-3/4 bg-zinc-800 rounded" />
+                <div className="h-4 w-24 bg-zinc-800 rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Skeleton product cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="bg-[#141414] rounded-xl border border-[#262626] animate-pulse">
+              <div className="w-full h-40 bg-zinc-800 rounded-t-xl" />
+              <div className="p-4 space-y-3">
+                <div className="flex gap-2">
+                  <div className="h-3 w-14 bg-zinc-800 rounded" />
+                </div>
+                <div className="space-y-1.5">
+                  <div className="h-3.5 w-full bg-zinc-800 rounded" />
+                  <div className="h-3.5 w-2/3 bg-zinc-800 rounded" />
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <div className="h-6 w-24 bg-zinc-800 rounded" />
+                  <div className="h-5 w-12 bg-zinc-800 rounded" />
+                </div>
+                <div className="h-4 w-28 bg-zinc-800 rounded" />
+                <div className="pt-3 border-t border-[#262626] flex justify-between">
+                  <div className="h-3 w-20 bg-zinc-800 rounded" />
+                  <div className="h-3 w-16 bg-zinc-800 rounded" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function StatsSkeleton() {
+  return (
+    <div className="grid grid-cols-3 gap-3 sm:gap-6 pt-4 max-w-md sm:max-w-none mx-auto">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="bg-[#141414] border border-[#262626] rounded-xl px-3 sm:px-6 py-3 sm:py-4 animate-pulse">
+          <div className="h-6 sm:h-7 w-10 bg-zinc-800 rounded mx-auto mb-1" />
+          <div className="h-3 sm:h-4 w-14 sm:w-16 bg-zinc-800 rounded mx-auto" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Landing() {
   const [stats, setStats] = useState<{
     total_products: number;
     last_update: string | null;
   } | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/scrape/status")
-      .then((r) => r.json() as Promise<{ total_products: number; last_update: string | null }>)
-      .then(setStats)
-      .catch(() => {});
-
-    fetch("/api/landing/products")
-      .then((r) => r.json() as Promise<Product[]>)
-      .then(setProducts)
-      .catch(() => {});
+    const fetchData = async () => {
+      try {
+        const [statsRes, productsRes] = await Promise.all([
+          fetch("/api/scrape/status"),
+          fetch("/api/landing/products"),
+        ]);
+        const [statsData, productsData] = await Promise.all([
+          statsRes.json() as Promise<{ total_products: number; last_update: string | null }>,
+          productsRes.json() as Promise<Product[]>,
+        ]);
+        setStats(statsData);
+        setProducts(productsData);
+      } catch {}
+      setLoading(false);
+    };
+    fetchData();
   }, []);
 
   return (
     <div className="min-h-screen flex flex-col">
-      <nav className="flex items-center justify-between px-8 py-4 border-b border-[#262626]">
+      <nav className="sticky top-0 z-50 flex items-center justify-between px-4 sm:px-8 py-4 border-b border-[#262626] bg-[#0a0a0a]/80 backdrop-blur-lg">
         <span className="text-xl font-bold tracking-tight">
           pote<span className="text-emerald-500">barato</span>
         </span>
-        <div className="flex gap-4 items-center">
+        <div className="flex gap-3 sm:gap-4 items-center">
           <a href="/docs" className="text-sm text-zinc-400 hover:text-white transition">
             Docs
+          </a>
+          <a
+            href="https://github.com/gxdevs/potebarato"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-zinc-400 hover:text-white transition"
+            title="GitHub"
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z" />
+            </svg>
           </a>
           <a
             href="/auth"
@@ -539,46 +659,53 @@ function Landing() {
         </div>
       </nav>
 
-      <main className="flex flex-col items-center px-4 py-24">
-        <div className="max-w-2xl text-center space-y-6">
-          <h1 className="text-5xl font-bold tracking-tight">
+      <main className="flex flex-col items-center px-4 sm:px-6 py-14 sm:py-20 lg:py-24">
+        <div className="max-w-2xl w-full text-center space-y-5 sm:space-y-6">
+          <div className="inline-flex items-center gap-2 text-xs font-medium text-emerald-500 bg-emerald-500/10 px-3 py-1.5 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Monitoramento em tempo real
+          </div>
+
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight leading-tight">
             Compare preços de{" "}
             <span className="text-emerald-500">creatina</span>
           </h1>
-          <p className="text-lg text-zinc-400">
+          <p className="text-base sm:text-lg text-zinc-400 max-w-xl mx-auto">
             API em tempo real com preços de creatina das maiores lojas de
             suplementos do Brasil. Dados atualizados a cada 6 horas.
           </p>
 
-          {stats && (
-            <div className="flex gap-6 justify-center pt-4">
-              <div className="bg-[#141414] border border-[#262626] rounded-xl px-6 py-4">
-                <div className="text-2xl font-bold text-emerald-500">
+          {loading ? (
+            <StatsSkeleton />
+          ) : stats ? (
+            <div className="grid grid-cols-3 gap-3 sm:gap-6 pt-4 max-w-md sm:max-w-none mx-auto">
+              <div className="bg-[#141414] border border-[#262626] rounded-xl px-3 sm:px-6 py-3 sm:py-4">
+                <div className="text-xl sm:text-2xl font-bold text-emerald-500">
                   {stats.total_products}
                 </div>
-                <div className="text-sm text-zinc-400">Produtos</div>
+                <div className="text-xs sm:text-sm text-zinc-400">Produtos</div>
               </div>
-              <div className="bg-[#141414] border border-[#262626] rounded-xl px-6 py-4">
-                <div className="text-2xl font-bold text-emerald-500">3</div>
-                <div className="text-sm text-zinc-400">Marcas</div>
+              <div className="bg-[#141414] border border-[#262626] rounded-xl px-3 sm:px-6 py-3 sm:py-4">
+                <div className="text-xl sm:text-2xl font-bold text-emerald-500">3</div>
+                <div className="text-xs sm:text-sm text-zinc-400">Marcas</div>
               </div>
-              <div className="bg-[#141414] border border-[#262626] rounded-xl px-6 py-4">
-                <div className="text-2xl font-bold text-emerald-500">6h</div>
-                <div className="text-sm text-zinc-400">Atualização</div>
+              <div className="bg-[#141414] border border-[#262626] rounded-xl px-3 sm:px-6 py-3 sm:py-4">
+                <div className="text-xl sm:text-2xl font-bold text-emerald-500">6h</div>
+                <div className="text-xs sm:text-sm text-zinc-400">Atualização</div>
               </div>
             </div>
-          )}
+          ) : null}
 
-          <div className="flex flex-wrap gap-4 justify-center pt-4">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center pt-4">
             <a
               href="#comparador"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3 rounded-xl font-medium text-lg transition"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3 rounded-xl font-medium text-base sm:text-lg transition text-center"
             >
               Comparar preços
             </a>
             <a
               href="/docs"
-              className="border border-[#262626] hover:border-zinc-600 text-zinc-300 px-8 py-3 rounded-xl font-medium text-lg transition"
+              className="border border-[#262626] hover:border-zinc-600 text-zinc-300 px-8 py-3 rounded-xl font-medium text-base sm:text-lg transition text-center"
             >
               Ver documentação
             </a>
@@ -586,16 +713,14 @@ function Landing() {
         </div>
       </main>
 
-      {products.length > 0 && (
-        <section className="marquee-section">
-          <h2 className="marquee-title">
-            Produtos monitorados em <span className="text-emerald-500">tempo real</span>
-          </h2>
-          <Marquee products={products} />
-        </section>
-      )}
+      <section className="marquee-section">
+        <h2 className="marquee-title">
+          Produtos monitorados em <span className="text-emerald-500">tempo real</span>
+        </h2>
+        {loading ? <MarqueeSkeleton /> : products.length > 0 ? <Marquee products={products} /> : null}
+      </section>
 
-      {products.length > 0 && <PriceComparator products={products} />}
+      {loading ? <ComparatorSkeleton /> : products.length > 0 ? <PriceComparator products={products} /> : null}
 
       <section className="py-20 px-4 border-t border-[#262626]">
         <div className="max-w-4xl mx-auto">
