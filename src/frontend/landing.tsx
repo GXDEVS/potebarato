@@ -107,6 +107,174 @@ function ComparePanel({
   );
 }
 
+function HighlightCard({
+  product,
+  badgeLabel,
+  badgeColor,
+  badgeBg,
+  borderColor,
+  priceColor,
+  priceLabel,
+  priceSublabel,
+  btnColor,
+  btnHover,
+}: {
+  product: Product;
+  badgeLabel: string;
+  badgeColor: string;
+  badgeBg: string;
+  borderColor: string;
+  priceColor: string;
+  priceLabel: string;
+  priceSublabel: string;
+  btnColor: string;
+  btnHover: string;
+}) {
+  const price = parseFloat(product.totalPrice);
+  const ppg = parseFloat(product.pricePerGram);
+  const priceDisplay = priceLabel
+    .replace("{price}", price.toFixed(2))
+    .replace("{ppg}", ppg.toFixed(4));
+  const subDisplay = priceSublabel
+    .replace("{price}", price.toFixed(2))
+    .replace("{ppg}", ppg.toFixed(4))
+    .replace("{weight}", String(product.weightGrams));
+
+  return (
+    <div
+      style={{ borderColor, background: "#141414" }}
+      className="group rounded-xl border-2 overflow-hidden transition-all duration-200 hover:-translate-y-1 hover:shadow-lg"
+    >
+      <div style={{ display: "flex", padding: 12, gap: 12 }}>
+        {/* Image — fixed size, always square, white bg */}
+        <div
+          style={{
+            width: 90,
+            minWidth: 90,
+            height: 100,
+            background: "#ffffff",
+            borderRadius: 8,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "hidden",
+            flexShrink: 0,
+          }}
+        >
+          {product.imageUrl ? (
+            <img
+              src={product.imageUrl}
+              alt={product.productName}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                padding: 6,
+              }}
+              loading="lazy"
+            />
+          ) : (
+            <span style={{ color: "#71717a", fontSize: 10 }}>Sem imagem</span>
+          )}
+        </div>
+
+        {/* Right side */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Badge + brand */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
+            <span
+              style={{
+                color: badgeColor,
+                backgroundColor: badgeBg,
+                fontSize: 10,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                padding: "2px 8px",
+                borderRadius: 999,
+                display: "inline-block",
+              }}
+            >
+              {badgeLabel}
+            </span>
+            <span
+              style={{
+                color: "#71717a",
+                fontSize: 10,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+              }}
+            >
+              {product.brand}
+            </span>
+          </div>
+
+          {/* Product name */}
+          <div
+            style={{
+              fontSize: 13,
+              color: "#d4d4d8",
+              fontWeight: 500,
+              lineHeight: 1.3,
+              marginBottom: 6,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+          >
+            {product.productName}
+          </div>
+
+          {/* Price */}
+          <div style={{ fontSize: 18, fontWeight: 700, color: priceColor }}>
+            {priceDisplay}
+          </div>
+          <div style={{ fontSize: 11, color: "#71717a", marginTop: 1 }}>
+            {subDisplay}
+          </div>
+        </div>
+      </div>
+
+      {/* Button row */}
+      <div style={{ padding: "0 12px 12px" }}>
+        <a
+          href={product.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            background: btnColor,
+            color: "#fff",
+            fontWeight: 600,
+            fontSize: 13,
+            borderRadius: 8,
+            padding: "10px 16px",
+            textDecoration: "none",
+            width: "100%",
+            transition: "background 0.15s",
+            cursor: "pointer",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = btnHover)}
+          onMouseLeave={(e) => (e.currentTarget.style.background = btnColor)}
+        >
+          Ver na loja
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5" />
+            <path d="M21 3v5.25" />
+            <path d="M14 10l7-7" />
+            <path d="M14 3h7v7" />
+          </svg>
+        </a>
+      </div>
+    </div>
+  );
+}
+
 function PriceComparator({ products }: { products: Product[] }) {
   const [search, setSearch] = useState("");
   const [brandFilter, setBrandFilter] = useState("all");
@@ -234,28 +402,32 @@ function PriceComparator({ products }: { products: Product[] }) {
         {filtered.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
             {bestByPrice && (
-              <div className="bg-[#141414] border border-[#262626] rounded-xl p-5 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                  <span className="text-emerald-500 text-lg font-bold">$</span>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs text-zinc-500 mb-0.5">Mais barata</div>
-                  <div className="text-sm font-medium text-white truncate">{bestByPrice.productName}</div>
-                  <div className="text-emerald-500 font-bold">R$ {parseFloat(bestByPrice.totalPrice).toFixed(2)}</div>
-                </div>
-              </div>
+              <HighlightCard
+                product={bestByPrice}
+                badgeLabel="Mais barata"
+                badgeColor="#10b981"
+                badgeBg="#10b98118"
+                borderColor="#10b98133"
+                priceColor="#10b981"
+                priceLabel="R$ {price}"
+                priceSublabel="{weight}g · R$ {ppg}/g"
+                btnColor="#10b981"
+                btnHover="#059669"
+              />
             )}
             {bestByValue && (
-              <div className="bg-[#141414] border border-[#262626] rounded-xl p-5 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                  <span className="text-emerald-500 text-lg font-bold">g</span>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs text-zinc-500 mb-0.5">Melhor custo-benefício</div>
-                  <div className="text-sm font-medium text-white truncate">{bestByValue.productName}</div>
-                  <div className="text-emerald-500 font-bold">R$ {parseFloat(bestByValue.pricePerGram).toFixed(4)}/g</div>
-                </div>
-              </div>
+              <HighlightCard
+                product={bestByValue}
+                badgeLabel="Melhor custo-benefício"
+                badgeColor="#ca8a04"
+                badgeBg="#facc1520"
+                borderColor="#facc1530"
+                priceColor="#ca8a04"
+                priceLabel="R$ {ppg}/g"
+                priceSublabel="{weight}g · R$ {price}"
+                btnColor="#ca8a04"
+                btnHover="#a16207"
+              />
             )}
           </div>
         )}
@@ -547,12 +719,19 @@ function ComparatorSkeleton() {
         {/* Skeleton highlights */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
           {[0, 1].map((i) => (
-            <div key={i} className="bg-[#141414] border border-[#262626] rounded-xl p-5 flex items-center gap-4 animate-pulse">
-              <div className="w-10 h-10 rounded-lg bg-zinc-800 shrink-0" />
-              <div className="flex-1 space-y-2">
-                <div className="h-2.5 w-20 bg-zinc-800 rounded" />
-                <div className="h-3.5 w-3/4 bg-zinc-800 rounded" />
-                <div className="h-4 w-24 bg-zinc-800 rounded" />
+            <div key={i} className="bg-[#141414] border border-[#262626] rounded-xl overflow-hidden animate-pulse">
+              <div style={{ display: "flex", padding: 12, gap: 12 }}>
+                <div style={{ width: 90, minWidth: 90, height: 100, borderRadius: 8 }} className="bg-zinc-800 shrink-0" />
+                <div style={{ flex: 1 }}>
+                  <div className="h-4 w-24 bg-zinc-800 rounded-full mb-2" />
+                  <div className="h-3 w-14 bg-zinc-800 rounded mb-2" />
+                  <div className="h-3.5 w-3/4 bg-zinc-800 rounded mb-3" />
+                  <div className="h-5 w-20 bg-zinc-800 rounded" />
+                  <div className="h-3 w-32 bg-zinc-800 rounded mt-1" />
+                </div>
+              </div>
+              <div style={{ padding: "0 12px 12px" }}>
+                <div className="h-10 w-full bg-zinc-800 rounded-lg" />
               </div>
             </div>
           ))}
