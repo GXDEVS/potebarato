@@ -3,13 +3,32 @@ services:
     image: postgres:17-alpine
     container_name: potebarato-db
     ports:
-      - "5432:5432" # alterar porta
+      - "${DB_PORT:-5434}:5432"
     environment:
-      POSTGRES_USER: potebarato
-      POSTGRES_PASSWORD: potebarato
-      POSTGRES_DB: potebarato
+      POSTGRES_USER: ${POSTGRES_USER:-potebarato}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-potebarato}
+      POSTGRES_DB: ${POSTGRES_DB:-potebarato}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-potebarato}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: potebarato-app
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-potebarato}:${POSTGRES_PASSWORD:-potebarato}@postgres:5432/${POSTGRES_DB:-potebarato}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev-secret-key-potebarato-local-32chars!!}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   pgdata:
