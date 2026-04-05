@@ -22,7 +22,7 @@ interface ScrapeStatus {
   last_update: string | null;
 }
 
-const CRON_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+import { CRON_INTERVAL_MS } from "../lib/constants";
 
 function getNextCronRun(lastUpdate: string | null): string {
   if (!lastUpdate) return "Aguardando primeiro scraping";
@@ -51,7 +51,7 @@ function Dashboard() {
   const [scraping, setScraping] = useState(false);
   const [scrapeMsg, setScrapeMsg] = useState("");
 
-  const isAdmin = (session?.user as any)?.role === "admin";
+  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
 
   useEffect(() => {
     if (!isPending && !session) {
@@ -77,7 +77,9 @@ function Dashboard() {
       if (res.ok) {
         setScrapeStatus(await res.json());
       }
-    } catch {}
+    } catch (err) {
+      console.error("[dashboard] Failed to fetch scrape status:", err);
+    }
   }, []);
 
   useEffect(() => {
@@ -111,7 +113,14 @@ function Dashboard() {
         if (data.type === "usage") {
           setUsage({ used: data.used, max: data.max, remaining: data.remaining });
         }
-      } catch {}
+      } catch (err) {
+        console.error("[dashboard] WebSocket message parse error:", err);
+      }
+    };
+
+    ws.onerror = () => {
+      console.error("[dashboard] WebSocket error");
+      setUsage(null);
     };
 
     ws.onclose = () => { wsRef.current = null; };
@@ -143,10 +152,20 @@ function Dashboard() {
   };
 
   const revokeKey = async (id: string) => {
-    await fetch(`/api/keys/${id}`, { method: "DELETE", credentials: "include" });
-    setNewKey(null);
-    setUsage(null);
-    await fetchKeys();
+    if (!confirm("Tem certeza que deseja revogar esta API key? Esta ação não pode ser desfeita.")) return;
+    try {
+      const res = await fetch(`/api/keys/${id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error ?? "Erro ao revogar chave");
+        return;
+      }
+      setNewKey(null);
+      setUsage(null);
+      await fetchKeys();
+    } catch {
+      setError("Erro de conexão ao revogar chave");
+    }
   };
 
   const triggerScrape = async () => {
