@@ -10,16 +10,32 @@ interface UserUsage {
 const usageMap = new Map<string, UserUsage>();
 
 // WebSocket subscribers: userId -> Set of ServerWebSocket
-const subscribers = new Map<string, Set<any>>();
+const subscribers = new Map<string, Set<{ send(msg: string): void }>>();
 
-export function subscribe(userId: string, ws: any) {
+// Periodic cleanup of expired entries to prevent memory leak
+setInterval(() => {
+  const now = Date.now();
+  for (const [userId, entry] of usageMap) {
+    if (now - entry.windowStart >= WINDOW_MS) {
+      usageMap.delete(userId);
+    }
+  }
+  // Clean empty subscriber sets
+  for (const [userId, sockets] of subscribers) {
+    if (sockets.size === 0) {
+      subscribers.delete(userId);
+    }
+  }
+}, WINDOW_MS);
+
+export function subscribe(userId: string, ws: { send(msg: string): void }) {
   if (!subscribers.has(userId)) {
     subscribers.set(userId, new Set());
   }
   subscribers.get(userId)!.add(ws);
 }
 
-export function unsubscribe(ws: any) {
+export function unsubscribe(ws: { send(msg: string): void }) {
   for (const [, sockets] of subscribers) {
     sockets.delete(ws);
   }

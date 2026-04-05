@@ -29,6 +29,27 @@
       "when": 1775241273326,
       "tag": "0003_fixed_boomerang",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1775421172119,
+      "tag": "0004_large_rafael_vega",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1775423474841,
+      "tag": "0005_classy_lady_bullseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1775423816687,
+      "tag": "0006_tiny_vin_gonzales",
+      "breakpoints": true
     }
   ]
 }
