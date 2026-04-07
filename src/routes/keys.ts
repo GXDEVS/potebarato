@@ -1,11 +1,9 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import z from "zod";
-import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
-import { db } from "@/db";
-import { apikey } from "@/db/auth-schema";
 import { ErrorSchema } from "@/lib/schemas";
+import { getKeysByUser, getUserKeyCount, getKeyById } from "@/services/keys";
 
 const KeySchema = z.object({
   id: z.string(),
@@ -52,10 +50,7 @@ app.get(
       return c.json({ error: "Não autorizado" }, 401);
     }
 
-    const keys = await db
-      .select()
-      .from(apikey)
-      .where(eq(apikey.referenceId, userId));
+    const keys = await getKeysByUser(userId);
 
     return c.json({
       keys: keys.map((k) => ({
@@ -106,13 +101,8 @@ app.post(
       return c.json({ error: "Não autorizado" }, 401);
     }
 
-    const existing = await db
-      .select({ id: apikey.id })
-      .from(apikey)
-      .where(eq(apikey.referenceId, userId))
-      .limit(1);
-
-    if (existing.length > 0) {
+    const existingCount = await getUserKeyCount(userId);
+    if (existingCount > 0) {
       return c.json(
         { error: "Você já possui uma API key. Revogue a existente para criar uma nova." },
         400
@@ -170,15 +160,14 @@ app.delete(
     }
 
     const id = c.req.param("id");
-
-    const [key] = await db
-      .select({ id: apikey.id })
-      .from(apikey)
-      .where(eq(apikey.id, id))
-      .limit(1);
+    const key = await getKeyById(id);
 
     if (!key) {
       return c.json({ error: "Chave não encontrada" }, 404);
+    }
+
+    if (key.referenceId !== userId) {
+      return c.json({ error: "Sem permissão para revogar esta chave" }, 403);
     }
 
     await auth.api.deleteApiKey({

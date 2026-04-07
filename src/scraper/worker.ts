@@ -6,10 +6,19 @@ import { SITE_CONFIGS } from "./sites";
 import { crawl } from "./crawler";
 import { scrape } from "./scraper";
 import { upsertProducts } from "./db";
+import { logger } from "@/lib/logger";
+
+const WORKER_TIMEOUT = 30 * 60 * 1000; // 30 minutes max per run
 
 async function run() {
   const startTime = Date.now();
-  console.log(`[worker] Starting scrape run at ${new Date().toISOString()}`);
+  logger.info("worker", "Starting scrape run");
+
+  // Kill process if it exceeds timeout
+  const timer = setTimeout(() => {
+    logger.error("worker", `Timeout exceeded (${WORKER_TIMEOUT / 60000}min), forcing exit`);
+    process.exit(1);
+  }, WORKER_TIMEOUT);
 
   let totalProducts = 0;
   let totalErrors = 0;
@@ -22,17 +31,16 @@ async function run() {
       totalProducts += upserted;
     } catch (error) {
       totalErrors++;
-      console.error(`[worker] Failed for ${config.brand}:`, error);
+      logger.error("worker", `Failed for ${config.brand}`, { error: error instanceof Error ? error.stack : String(error) });
     }
   }
 
+  clearTimeout(timer);
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(
-    `[worker] Done in ${elapsed}s — ${totalProducts} products upserted, ${totalErrors} site errors`
-  );
+  logger.info("worker", `Done in ${elapsed}s`, { totalProducts, totalErrors });
 }
 
 run().catch((error) => {
-  console.error("[worker] Fatal error:", error);
+  logger.error("worker", "Fatal error", { error: error instanceof Error ? error.stack : String(error) });
   process.exit(1);
 });
