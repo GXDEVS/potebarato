@@ -1,6 +1,8 @@
 import { chromium, type Page } from "playwright";
 import type { SiteConfig } from "./types";
 
+const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 const HEADERS = { "User-Agent": "potebarato-bot/1.0" };
 const FETCH_TIMEOUT = 10_000;     // Timeout para requests de sitemap/HEAD (ms)
 const HEAD_CONCURRENCY = 10;      // Requests HEAD simultaneos para validacao
@@ -189,7 +191,7 @@ export async function discoverFromSearch(
     });
     console.log(`[crawler:search] Page loaded (title: "${await page.title()}"), waiting 6s for JS...`);
     // Wait for Cloudflare/JS verification to resolve before scraping links
-    await page.waitForTimeout(6000);
+    await delay(6000);
     console.log(`[crawler:search] Wait done (title: "${await page.title()}")`);
 
     // Click "load more" buttons until none remain (JS-rendered pagination)
@@ -204,7 +206,7 @@ export async function discoverFromSearch(
         }
         console.log(`[crawler:search] Clicking load-more (click #${clicks + 1})...`);
         await btn.click();
-        await page.waitForTimeout(3000);
+        await delay(3000);
         clicks++;
       }
       const links = await extractProductLinks(page, linkSelector, config.baseUrl);
@@ -240,7 +242,7 @@ export async function discoverFromSearch(
           waitUntil: "domcontentloaded",
           timeout: 30_000,
         });
-        await page.waitForTimeout(2000);
+        await delay(2000);
       }
     }
 
