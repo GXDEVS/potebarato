@@ -267,11 +267,11 @@ async function processQueue(
       "Accept-Language": "pt-BR,pt;q=0.9",
     },
   });
-  const page = await context.newPage();
   const results: ProductData[] = [];
 
   for (const url of urls) {
     let product: ProductData | null = null;
+    let page = await context.newPage();
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         product = await scrapePage(page, url, config);
@@ -284,11 +284,15 @@ async function processQueue(
         if (attempt < MAX_RETRIES) {
           console.log(`[scraper] Retry ${attempt + 1}/${MAX_RETRIES} for ${url}`);
           await delay(3000 * (attempt + 1));
+          // Recreate page in case it was closed/crashed
+          try { await page.close(); } catch {}
+          page = await context.newPage();
         } else {
           console.error(`[scraper] Failed to scrape ${url} after ${MAX_RETRIES} retries:`, error);
         }
       }
     }
+    try { await page.close(); } catch {}
     if (product) {
       results.push(product);
     }
