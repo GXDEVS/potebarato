@@ -162,6 +162,7 @@ export async function discoverFromSearch(
   const maxPages = config.search.maxPages ?? 3;
   const linkSelector = config.search.linkSelector;
   const nextSelector = config.search.nextPageSelector;
+  const loadMoreSelector = config.search.loadMoreSelector;
 
   console.log(`[crawler] Search discovery for ${config.brand}: ${searchUrl}`);
 
@@ -188,28 +189,42 @@ export async function discoverFromSearch(
     // Wait for Cloudflare/JS verification to resolve before scraping links
     await page.waitForTimeout(6000);
 
-    for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+    // Click "load more" buttons until none remain (JS-rendered pagination)
+    if (loadMoreSelector) {
+      let clicks = 0;
+      while (clicks < 10) {
+        const btn = await page.$(loadMoreSelector);
+        if (!btn) break;
+        await btn.click();
+        await page.waitForTimeout(3000);
+        clicks++;
+      }
       const links = await extractProductLinks(page, linkSelector, config.baseUrl);
       for (const link of links) found.add(link);
+    } else {
+      for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+        const links = await extractProductLinks(page, linkSelector, config.baseUrl);
+        for (const link of links) found.add(link);
 
-      if (pageNum >= maxPages || !nextSelector) break;
+        if (pageNum >= maxPages || !nextSelector) break;
 
-      const nextBtn = await page.$(nextSelector);
-      if (!nextBtn) break;
+        const nextBtn = await page.$(nextSelector);
+        if (!nextBtn) break;
 
-      const nextLinks = await page.$$eval(nextSelector, (els) =>
-        els.map((el) => (el as HTMLAnchorElement).href)
-      );
-      const nextPageUrl = nextLinks.find(
-        (href) => href && !href.includes(`page=${pageNum}`)
-      );
-      if (!nextPageUrl) break;
+        const nextLinks = await page.$$eval(nextSelector, (els) =>
+          els.map((el) => (el as HTMLAnchorElement).href)
+        );
+        const nextPageUrl = nextLinks.find(
+          (href) => href && !href.includes(`page=${pageNum}`)
+        );
+        if (!nextPageUrl) break;
 
-      await page.goto(nextPageUrl, {
-        waitUntil: "domcontentloaded",
-        timeout: 30_000,
-      });
-      await page.waitForTimeout(2000);
+        await page.goto(nextPageUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: 30_000,
+        });
+        await page.waitForTimeout(2000);
+      }
     }
 
     await context.close();

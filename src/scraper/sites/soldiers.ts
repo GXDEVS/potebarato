@@ -12,7 +12,6 @@ export const soldiers: SiteConfig = {
   search: {
     path: "/search?q={query}&type=product",
     linkSelector: 'a[href*="/products/"]',
-    nextPageSelector: 'a[href*="page="]',
-    maxPages: 3,
+    loadMoreSelector: ".ec-load-more-btn",
   },
 };
