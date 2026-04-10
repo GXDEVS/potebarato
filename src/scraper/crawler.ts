@@ -182,34 +182,47 @@ export async function discoverFromSearch(
     });
     const page = await context.newPage();
 
+    console.log(`[crawler:search] Navigating to search page...`);
     await page.goto(searchUrl, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
+    console.log(`[crawler:search] Page loaded (title: "${await page.title()}"), waiting 6s for JS...`);
     // Wait for Cloudflare/JS verification to resolve before scraping links
     await page.waitForTimeout(6000);
+    console.log(`[crawler:search] Wait done (title: "${await page.title()}")`);
 
     // Click "load more" buttons until none remain (JS-rendered pagination)
     if (loadMoreSelector) {
+      console.log(`[crawler:search] Using load-more strategy (selector: "${loadMoreSelector}")`);
       let clicks = 0;
       while (clicks < 10) {
         const btn = await page.$(loadMoreSelector);
-        if (!btn) break;
+        if (!btn) {
+          console.log(`[crawler:search] No more load-more button after ${clicks} click(s)`);
+          break;
+        }
+        console.log(`[crawler:search] Clicking load-more (click #${clicks + 1})...`);
         await btn.click();
         await page.waitForTimeout(3000);
         clicks++;
       }
       const links = await extractProductLinks(page, linkSelector, config.baseUrl);
+      console.log(`[crawler:search] Extracted ${links.length} links after load-more`);
       for (const link of links) found.add(link);
     } else {
       for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
         const links = await extractProductLinks(page, linkSelector, config.baseUrl);
+        console.log(`[crawler:search] Page ${pageNum}: extracted ${links.length} links`);
         for (const link of links) found.add(link);
 
         if (pageNum >= maxPages || !nextSelector) break;
 
         const nextBtn = await page.$(nextSelector);
-        if (!nextBtn) break;
+        if (!nextBtn) {
+          console.log(`[crawler:search] No next-page button found, stopping at page ${pageNum}`);
+          break;
+        }
 
         const nextLinks = await page.$$eval(nextSelector, (els) =>
           els.map((el) => (el as HTMLAnchorElement).href)
@@ -217,8 +230,12 @@ export async function discoverFromSearch(
         const nextPageUrl = nextLinks.find(
           (href) => href && !href.includes(`page=${pageNum}`)
         );
-        if (!nextPageUrl) break;
+        if (!nextPageUrl) {
+          console.log(`[crawler:search] No next-page URL found, stopping at page ${pageNum}`);
+          break;
+        }
 
+        console.log(`[crawler:search] Navigating to page ${pageNum + 1}: ${nextPageUrl}`);
         await page.goto(nextPageUrl, {
           waitUntil: "domcontentloaded",
           timeout: 30_000,
