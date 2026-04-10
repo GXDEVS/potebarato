@@ -64,15 +64,21 @@ export function normalizeUrl(url: string): string {
   }
 }
 
-async function fetchText(url: string): Promise<string> {
-  const response = await fetch(url, {
-    headers: HEADERS,
-    signal: AbortSignal.timeout(FETCH_TIMEOUT),
-  });
-  if (!response.ok) {
+async function fetchText(url: string, retries = 3): Promise<string> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const response = await fetch(url, {
+      headers: HEADERS,
+      signal: AbortSignal.timeout(FETCH_TIMEOUT),
+    });
+    if (response.ok) return response.text();
+    // Retry on transient server errors (5xx)
+    if (response.status >= 500 && attempt < retries) {
+      await new Promise((r) => setTimeout(r, 2000 * attempt));
+      continue;
+    }
     throw new Error(`Fetch failed: ${response.status} ${url}`);
   }
-  return response.text();
+  throw new Error(`Fetch failed after ${retries} retries: ${url}`);
 }
 
 async function expandSitemaps(sitemapUrls: string[]): Promise<string[]> {
@@ -165,7 +171,13 @@ export async function discoverFromSearch(
   try {
     const context = await browser.newContext({
       viewport: { width: 1280, height: 800 },
-      extraHTTPHeaders: { "Accept-Language": "pt-BR,pt;q=0.9" },
+      userAgent:
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      extraHTTPHeaders: {
+        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+      },
     });
     const page = await context.newPage();
 
@@ -173,7 +185,8 @@ export async function discoverFromSearch(
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
-    await page.waitForTimeout(3000);
+    // Wait for Cloudflare/JS verification to resolve before scraping links
+    await page.waitForTimeout(6000);
 
     for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
       const links = await extractProductLinks(page, linkSelector, config.baseUrl);
