@@ -51,7 +51,9 @@ export function filterCreatinaUrls(urls: string[]): string[] {
     const path = new URL(url).pathname.toLowerCase();
     if (!/creatin/.test(path)) return false;
     if (/\/kit[-_]/.test(path)) return false;
-    if (/comprimido|comp\b|capsul|caps\b|tablet/.test(path)) return false;
+    if (/^\/pack[-_/]|\/pack-/.test(path)) return false;
+    if (/comprimido|comp\b|capsul|caps\b|tablet|goma|barra/.test(path)) return false;
+    if (/vegan/.test(path)) return false;
     return true;
   });
 }

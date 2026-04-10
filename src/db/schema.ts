@@ -21,5 +21,6 @@ export const products = pgTable("products", {
   inStock: boolean("in_stock").notNull().default(true),
   url: text("url").notNull().unique(),
   imageUrl: text("image_url"),
+  purityLabel: text("purity_label"),
   lastUpdate: timestamp("last_update", { withTimezone: true }).notNull(),
 });

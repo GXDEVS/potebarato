@@ -42,5 +42,6 @@ export interface ProductData {
   inStock: boolean;
   url: string;
   imageUrl: string | null;
+  purityLabel: string | null;
   lastUpdate: Date;
 }

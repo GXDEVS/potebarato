@@ -21,6 +21,7 @@ export async function upsertProducts(data: ProductData[]): Promise<number> {
         inStock: product.inStock,
         url: product.url,
         imageUrl: product.imageUrl,
+        purityLabel: product.purityLabel,
         lastUpdate: product.lastUpdate,
       })
       .onConflictDoUpdate({
@@ -34,6 +35,7 @@ export async function upsertProducts(data: ProductData[]): Promise<number> {
           currency: sql`excluded.currency`,
           inStock: sql`excluded.in_stock`,
           imageUrl: sql`excluded.image_url`,
+          purityLabel: sql`excluded.purity_label`,
           lastUpdate: sql`excluded.last_update`,
         },
       });

@@ -27,6 +27,19 @@ export function parsePrice(raw: string): number {
   return parseFloat(cleaned);
 }
 
+/**
+ * Extrai o selo/label de pureza do nome do produto e URL.
+ * - "Creapure" → certificação alemã, 99.99%+ de pureza
+ * - "100% Pura" / "99%" → claim declarado pelo fabricante
+ */
+export function extractPurityLabel(name: string, url: string = ""): string | null {
+  const combined = `${name} ${url}`;
+  if (/creapure/i.test(combined)) return "Creapure";
+  const pct = name.match(/(\d{2,3}(?:[.,]\d+)?)\s*%\s*(?:pura?|pureza)/i);
+  if (pct) return pct[0].replace(/\s+/, " ").trim();
+  return null;
+}
+
 /** Extrai peso em gramas do nome do produto (ex: "Creatina 1Kg" → 1000, "500g" → 500) */
 export function extractWeightGrams(name: string): number | null {
   const kgMatch = name.match(/(\d+(?:[.,]\d+)?)\s*kg/i);
@@ -256,6 +269,7 @@ async function scrapePage(
     inStock,
     url,
     imageUrl,
+    purityLabel: extractPurityLabel(name, url),
     lastUpdate: new Date(),
   };
 }
