@@ -102,7 +102,11 @@ export function extractJsonLdProduct(
 ): JsonLdExtracted | null {
   for (const raw of scripts) {
     try {
-      const parsed = JSON.parse(raw);
+      // Sanitize escaped slashes and invalid leading-zero numbers (e.g. gtin13: 0602...)
+      const sanitized = raw
+        .replace(/\\\//g, "/")
+        .replace(/:\s*0(\d+)/g, ': "$1"');
+      const parsed = JSON.parse(sanitized);
       const items = Array.isArray(parsed) ? parsed : [parsed];
       for (const data of items) {
         const result = matchJsonLdItem(data, strategy);
