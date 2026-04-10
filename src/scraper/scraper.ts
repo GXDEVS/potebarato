@@ -274,17 +274,19 @@ async function scrapePage(
   };
 }
 
+async function newContext(browser: Browser) {
+  return browser.newContext({
+    viewport: { width: 1280, height: 800 },
+    extraHTTPHeaders: { "Accept-Language": "pt-BR,pt;q=0.9" },
+  });
+}
+
 async function processQueue(
   browser: Browser,
   urls: string[],
   config: SiteConfig
 ): Promise<ProductData[]> {
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 800 },
-    extraHTTPHeaders: {
-      "Accept-Language": "pt-BR,pt;q=0.9",
-    },
-  });
+  let context = await newContext(browser);
   const results: ProductData[] = [];
 
   for (const url of urls) {
@@ -302,22 +304,26 @@ async function processQueue(
         if (attempt < MAX_RETRIES) {
           console.log(`[scraper] Retry ${attempt + 1}/${MAX_RETRIES} for ${url}`);
           await delay(3000 * (attempt + 1));
-          // Recreate page in case it was closed/crashed
           try { await page.close(); } catch {}
-          page = await context.newPage();
+          // Se o context fechou junto, recria tudo
+          try {
+            page = await context.newPage();
+          } catch {
+            try { await context.close(); } catch {}
+            context = await newContext(browser);
+            page = await context.newPage();
+          }
         } else {
           console.error(`[scraper] Failed to scrape ${url} after ${MAX_RETRIES} retries:`, error);
         }
       }
     }
     try { await page.close(); } catch {}
-    if (product) {
-      results.push(product);
-    }
+    if (product) results.push(product);
     await randomDelay();
   }
 
-  await context.close();
+  try { await context.close(); } catch {}
   return results;
 }
 
