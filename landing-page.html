@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>potebarato — Compare pre&ccedil;os de creatina</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;border:0 solid}
+    html{color-scheme:dark}
+    body{
+      color:#fafafa;
+      -webkit-font-smoothing:antialiased;
+      background:#0a0a0a;
+      min-height:100vh;
+      font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+      line-height:1.6;
+    }
+    a{color:inherit;text-decoration:none}
+
+    /* nav */
+    .nav{
+      position:sticky;top:0;z-index:50;
+      display:flex;align-items:center;justify-content:space-between;
+      padding:1rem 2rem;
+      border-bottom:1px solid #262626;
+      background:rgba(10,10,10,.85);
+      backdrop-filter:blur(12px);
+      -webkit-backdrop-filter:blur(12px);
+    }
+    .logo{font-size:1.25rem;font-weight:700;letter-spacing:-.025em}
+    .logo em{font-style:normal;color:#10b981}
+
+    /* hero */
+    .hero{
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      text-align:center;
+      padding:6rem 1.5rem 4rem;
+    }
+    .badge{
+      display:inline-flex;align-items:center;gap:.5rem;
+      font-size:.75rem;font-weight:600;color:#10b981;
+      background:#10b98118;padding:.375rem 1rem;border-radius:999;margin-bottom:2rem;
+    }
+    .badge .dot{width:.375rem;height:.375rem;border-radius:50%;background:#10b981;animation:pulse 2s infinite}
+    @keyframes pulse{50%{opacity:.5}}
+    h1{font-size:clamp(2rem,5vw,3rem);font-weight:800;letter-spacing:-.025em;line-height:1.15}
+    h1 em{font-style:normal;color:#10b981}
+    .sub{max-width:36rem;margin-top:1rem;color:#a1a1ab;font-size:clamp(.875rem,2vw,1.1rem)}
+    .cta-group{display:flex;gap:1rem;margin-top:2rem;flex-wrap:wrap;justify-content:center}
+    .cta{
+      display:inline-flex;align-items:center;gap:.5rem;
+      padding:.75rem 2rem;border-radius:.75rem;font-weight:600;font-size:1rem;
+      transition:all .2s;cursor:pointer;border:none;
+    }
+    .cta-primary{background:#10b981;color:#fff}
+    .cta-primary:hover{background:#059669}
+    .cta-secondary{background:transparent;border:1px solid #262626;color:#e4e4e7}
+    .cta-secondary:hover{border-color:#52525b;background:#141414}
+
+    /* stats */
+    .stats{
+      display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;
+      max-width:28rem;margin:2.5rem auto 0;width:100%;
+    }
+    .stat{
+      background:#141414;border:1px solid #262626;border-radius:.75rem;
+      padding:1rem;text-align:center;
+    }
+    .stat .no{font-size:1.5rem;font-weight:800;color:#10b981}
+    .stat .lb{font-size:.75rem;color:#a1a1ab;margin-top:.25rem}
+
+    /* sections */
+    section{border-top:1px solid #262626;padding:4rem 1.5rem}
+    .container{max-width:64rem;margin:0 auto}
+    .section-title{font-size:clamp(1.5rem,3vw,2rem);font-weight:800;text-align:center;letter-spacing:-.025em;margin-bottom:3rem}
+    .section-title em{font-style:normal;color:#10b981}
+
+    /* how it works */
+    .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap:1.5rem}
+    .step{background:#141414;border:1px solid #262626;border-radius:.75rem;padding:2rem}
+    .step .icon{
+      width:2.5rem;height:2.5rem;border-radius:.5rem;
+      background:#10b98118;color:#10b981;
+      display:flex;align-items:center;justify-content:center;
+      font-size:1.25rem;font-weight:800;margin-bottom:1rem;
+    }
+    .step h3{font-size:1.125rem;font-weight:700;margin-bottom:.5rem}
+    .step p{color:#a1a1ab;font-size:.9rem;line-height:1.6}
+
+    /* features */
+    .feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:1rem}
+    .feat{
+      background:#141414;border:1px solid #262626;border-radius:.75rem;
+      padding:1.5rem;text-align:center;transition:border-color .2s,transform .2s;
+    }
+    .feat:hover{border-color:#10b98144;transform:translateY(-2px)}
+    .feat svg{color:#10b981;margin-bottom:.75rem}
+    .feat h4{font-size:.9rem;font-weight:700;margin-bottom:.25rem}
+    .feat p{font-size:.8rem;color:#71717a}
+
+    /* stack */
+    .stack{display:flex;flex-wrap:wrap;gap:1rem;justify-content:center}
+    .chip{
+      background:#141414;border:1px solid #262626;border-radius:999px;
+      padding:.5rem 1.25rem;font-size:.85rem;font-weight:500;
+      display:flex;align-items:center;gap:.5rem;
+    }
+    .chip span{color:#10b981}
+
+    /* api card */
+    .api-card{
+      background:#141414;border:1px solid #262626;border-radius:.75rem;
+      overflow:hidden;max-width:48rem;margin:0 auto;
+    }
+    .api-card .bar{
+      display:flex;align-items:center;gap:.5rem;
+      padding:.625rem 1rem;background:#0a0a0a;border-bottom:1px solid #262626;
+      font-size:.75rem;color:#71717a;
+    }
+    .api-card .bar .dot-r{width:.625rem;height:.625rem;border-radius:50%;background:#ef4444}
+    .api-card .bar .dot-y{width:.625rem;height:.625rem;border-radius:50%;background:#eab308}
+    .api-card .bar .dot-g{width:.625rem;height:.625rem;border-radius:50%;background:#22c55e}
+    .api-card pre{
+      padding:1.25rem;overflow-x:auto;
+      font-size:.8rem;line-height:1.7;
+      font-family:'SF Mono',Monaco,Menlo,Consolas,monospace;
+    }
+    .api-card pre .kw{color:#c084fc}
+    .api-card pre .str{color:#34d399}
+    .api-card pre .cm{color:#52525b}
+    .api-card pre .num{color:#fbbf24}
+
+    /* stores */
+    .stores{display:flex;flex-wrap:wrap;gap:2rem;justify-content:center;align-items:center;margin-top:2rem}
+    .store-name{
+      padding:.5rem 1.5rem;border:1px solid #262626;border-radius:999;
+      font-weight:600;font-size:.9rem;letter-spacing:.025em;
+    }
+
+    /* about */
+    .about-card{
+      max-width:40rem;margin:0 auto;
+      background:#141414;border:1px solid #262626;border-radius:.75rem;
+      padding:2rem 2.5rem;text-align:center;
+    }
+    .about-card .tag{
+      display:inline-block;color:#10b981;font-size:.7rem;font-weight:600;
+      background:#10b98118;padding:.25rem .75rem;border-radius:999;margin-bottom:1rem;
+      text-transform:uppercase;letter-spacing:.05em;
+    }
+    .about-card p{color:#a1a1ab;font-size:.9rem;max-width:32rem;margin:0 auto}
+    .about-card strong{color:#d4d4d8}
+
+    /* footer */
+    footer{text-align:center;padding:2rem 1rem;color:#52525b;font-size:.75rem;border-top:1px solid #262626}
+
+    /* responsive */
+    @media(max-width:40rem){
+      .nav{padding:1rem 1.25rem}
+      .hero{padding:4rem 1.25rem 3rem}
+      .stats{grid-template-columns:repeat(3,1fr);gap:.5rem}
+      .stat{padding:.75rem .5rem}
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav class="nav">
+    <div class="logo">pote<em>barato</em></div>
+    <div style="display:flex;gap:1.5rem;align-items:center;font-size:.875rem">
+      <a href="#recursos">Recursos</a>
+      <a href="#api">API</a>
+      <a href="https://github.com/gxdevs/potebarato" target="_blank" rel="noopener" title="GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor" width="20" height="20"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="badge"><span class="dot"></span> Monitoramento em tempo real</div>
+    <h1>Compare pre&ccedil;os de <em>creatina</em></h1>
+    <p class="sub">
+      API em tempo real com pre&ccedil;os de creatina das maiores lojas de
+      suplementos do Brasil. Dados atualizados a cada 6 horas.
+    </p>
+
+    <div class="stats">
+      <div class="stat"><div class="no">3</div><div class="lb">Marcas</div></div>
+      <div class="stat"><div class="no">100+</div><div class="lb">Produtos</div></div>
+      <div class="stat"><div class="no">6h</div><div class="lb">Atualiza&ccedil;&atilde;o</div></div>
+    </div>
+
+    <div class="cta-group">
+      <a href="#comparar" class="cta cta-primary">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        Comparar pre&ccedil;os
+      </a>
+      <a href="#api" class="cta cta-secondary">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M16 18 22 12 16 6"/><path d="M8 6 2 12 8 18"/></svg>
+        Ver API
+      </a>
+    </div>
+  </div>
+
+  <!-- Como funciona -->
+  <section>
+    <div class="container">
+      <h2 class="section-title">Como <em>funciona</em></h2>
+      <div class="steps">
+        <div class="step">
+          <div class="icon">1</div>
+          <h3>Dados p&uacute;blicos</h3>
+          <p>Crawlers visitam p&aacute;ginas p&uacute;blicas de lojas de suplementos e extraem dados estruturados via JSON-LD (Schema.org) indexados pelo Google.</p>
+        </div>
+        <div class="step">
+          <div class="icon">2</div>
+          <h3>Atualiza&ccedil;&atilde;o autom&aacute;tica</h3>
+          <p>A cada 6 horas o scraper roda em processo isolado, atualizando pre&ccedil;os, estoque e imagens via upsert no banco PostgreSQL.</p>
+        </div>
+        <div class="step">
+          <div class="icon">3</div>
+          <h3>API REST simples</h3>
+          <p>Consulte pre&ccedil;os, filtre por marca e compare produtos com uma &uacute;nica chamada. Documenta&ccedil;&atilde;o completa dispon&iacute;vel com OpenAPI.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Recursos -->
+  <section id="recursos">
+    <div class="container">
+      <h2 class="section-title">Recursos</h2>
+      <div class="feat-grid">
+        <div class="feat">
+          <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <h4>Busca inteligente</h4>
+          <p>Filtre por produto ou marca</p>
+        </div>
+        <div class="feat">
+          <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 3v7a4 4 0 004 4h10"/><path d="m7 17 3-3-3-3"/><line x1="14" y1="14" x2="21" y2="14"/></svg>
+          <h4>Pre&ccedil;o/grama</h4>
+          <p>Custo real por grama calculado</p>
+        </div>
+        <div class="feat">
+          <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="m9 21-3-3"/><path d="m15 21 3-3"/><path d="M2 12h20"/></svg>
+          <h4>Compara&ccedil;&atilde;o lado a lado</h4>
+          <p>At&eacute; 4 produtos simult&acirc;neos</p>
+        </div>
+        <div class="feat">
+          <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/></svg>
+          <h4>CronJob 6h</h4>
+          <p>Atualiza&ccedil;&atilde;o autom&aacute;tica</p>
+        </div>
+        <div class="feat">
+          <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
+          <h4>API Key auth</h4>
+          <p>Autentica&ccedil;&atilde;o via x-api-key</p>
+        </div>
+        <div class="feat">
+          <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          <h4>WebSocket</h4>
+          <p>Rate limit em tempo real</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- API -->
+  <section id="api">
+    <div class="container">
+      <h2 class="section-title">API REST</h2>
+      <p style="text-align:center;color:#a1a1ab;margin-top:-2rem;margin-bottom:2rem;font-size:.9rem">
+        endpoints com autentica&ccedil;&atilde;o por API Key e documenta&ccedil;&atilde;o OpenAPI/Scalar
+      </p>
+      <div class="api-card">
+        <div class="bar"><span class="dot-r"></span><span class="dot-y"></span><span class="dot-g"></span>bash</div>
+        <pre><span class="cm"># Listar todos os produtos</span>
+<span class="kw">curl</span> -H <span class="str">"x-api-key: SUA_CHAVE"</span> \
+  https://api.potebarato.com/api/products
+
+<span class="cm"># Filtrar por marca</span>
+<span class="kw">curl</span> -H <span class="str">"x-api-key: SUA_CHAVE"</span> \
+  https://api.potebarato.com/api/products<span style="color:#71717a">?brand=Growth</span>
+
+<span class="cm"># Status do scraping</span>
+<span class="kw">curl</span> https://api.potebarato.com/api/scrape/status</pre>
+      </div>
+
+      <h3 style="text-align:center;margin-top:2.5rem;margin-bottom:1rem;font-size:1rem;color:#a1a1ab">Lojas monitoradas</h3>
+      <div class="stores">
+        <span class="store-name">Growth Supplements</span>
+        <span class="store-name">Soldiers Nutrition</span>
+        <span class="store-name">Dark Lab</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Stack -->
+  <section>
+    <div class="container">
+      <h2 class="section-title">Stack Tecnol&oacute;gica</h2>
+      <div class="stack">
+        <div class="chip"><span>&#x25B6;</span> Bun</div>
+        <div class="chip"><span>&#x25B6;</span> Hono</div>
+        <div class="chip"><span>&#x25B6;</span> Playwright</div>
+        <div class="chip"><span>&#x25B6;</span> Drizzle ORM</div>
+        <div class="chip"><span>&#x25B6;</span> PostgreSQL</div>
+        <div class="chip"><span>&#x25B6;</span> Better Auth</div>
+        <div class="chip"><span>&#x25B6;</span> React 19</div>
+        <div class="chip"><span>&#x25B6;</span> Tailwind CSS</div>
+        <div class="chip"><span>&#x25B6;</span> Zod</div>
+        <div class="chip"><span>&#x25B6;</span> Scalar OpenAPI</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sobre -->
+  <section>
+    <div class="container">
+      <h2 class="section-title">Sobre o <em>projeto</em></h2>
+      <div class="about-card">
+        <div class="tag">Projeto educacional</div>
+        <p>
+          O <strong>potebarato</strong> foi criado com fins <strong>exclusivamente educacionais</strong> como
+          um estudo de web scraping, APIs REST e compara&ccedil;&atilde;o de pre&ccedil;os.
+          Todos os dados exibidos s&atilde;o <strong>p&uacute;blicos</strong>, coletados diretamente
+          das p&aacute;ginas das lojas indexadas pelo Google. Este projeto n&atilde;o possui fins comerciais
+          e n&atilde;o armazena dados pessoais de terceiros.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div>potebarato &copy; 2026</div>
+    <div style="margin-top:.25rem;color:#404040">Projeto educacional &mdash; dados publicamente dispon&iacute;veis</div>
+  </footer>
+
+</body>
+</html>

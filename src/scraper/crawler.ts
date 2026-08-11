@@ -1,6 +1,18 @@
 import { chromium, type Page } from "playwright";
 import type { SiteConfig } from "./types";
 
+const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Corre uma promise com timeout — evita travas em teardown do Playwright */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${label}`)), ms)
+    ),
+  ]);
+}
+
 const HEADERS = { "User-Agent": "potebarato-bot/1.0" };
 const FETCH_TIMEOUT = 10_000;     // Timeout para requests de sitemap/HEAD (ms)
 const HEAD_CONCURRENCY = 10;      // Requests HEAD simultaneos para validacao
@@ -51,7 +63,9 @@ export function filterCreatinaUrls(urls: string[]): string[] {
     const path = new URL(url).pathname.toLowerCase();
     if (!/creatin/.test(path)) return false;
     if (/\/kit[-_]/.test(path)) return false;
-    if (/comprimido|comp\b|capsul|caps\b|tablet/.test(path)) return false;
+    if (/^\/pack[-_/]|\/pack-/.test(path)) return false;
+    if (/comprimido|comp\b|capsul|caps\b|tablet|goma|barra/.test(path)) return false;
+    if (/vegan/.test(path)) return false;
     return true;
   });
 }
@@ -66,15 +80,21 @@ export function normalizeUrl(url: string): string {
   }
 }
 
-async function fetchText(url: string): Promise<string> {
-  const response = await fetch(url, {
-    headers: HEADERS,
-    signal: AbortSignal.timeout(FETCH_TIMEOUT),
-  });
-  if (!response.ok) {
+async function fetchText(url: string, retries = 3): Promise<string> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const response = await fetch(url, {
+      headers: HEADERS,
+      signal: AbortSignal.timeout(FETCH_TIMEOUT),
+    });
+    if (response.ok) return response.text();
+    // Retry on transient server errors (5xx)
+    if (response.status >= 500 && attempt < retries) {
+      await new Promise((r) => setTimeout(r, 2000 * attempt));
+      continue;
+    }
     throw new Error(`Fetch failed: ${response.status} ${url}`);
   }
-  return response.text();
+  throw new Error(`Fetch failed after ${retries} retries: ${url}`);
 }
 
 async function expandSitemaps(sitemapUrls: string[], depth = 0): Promise<string[]> {
@@ -168,6 +188,7 @@ export async function discoverFromSearch(
   const maxPages = config.search.maxPages ?? 3;
   const linkSelector = config.search.linkSelector;
   const nextSelector = config.search.nextPageSelector;
+  const loadMoreSelector = config.search.loadMoreSelector;
 
   console.log(`[crawler] Search discovery for ${config.brand}: ${searchUrl}`);
 
@@ -177,43 +198,97 @@ export async function discoverFromSearch(
   try {
     const context = await browser.newContext({
       viewport: { width: 1280, height: 800 },
-      extraHTTPHeaders: { "Accept-Language": "pt-BR,pt;q=0.9" },
+      userAgent:
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      extraHTTPHeaders: {
+        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+      },
     });
     const page = await context.newPage();
 
+    console.log(`[crawler:search] Navigating to search page...`);
     await page.goto(searchUrl, {
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
-    await page.waitForTimeout(3000);
+    const initialTitle = await page.title().catch(() => "?");
+    console.log(`[crawler:search] Page loaded (title: "${initialTitle}"), waiting 6s for JS...`);
+    // Wait for Cloudflare/JS verification to resolve before scraping links
+    await delay(6000);
+    console.log(`[crawler:search] Wait done`);
 
-    for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+    // Click "load more" buttons until none remain (JS-rendered pagination)
+    if (loadMoreSelector) {
+      console.log(`[crawler:search] Using load-more strategy (selector: "${loadMoreSelector}")`);
+      let clicks = 0;
+      while (clicks < 10) {
+        const btn = await page.$(loadMoreSelector);
+        if (!btn) {
+          console.log(`[crawler:search] No more load-more button after ${clicks} click(s)`);
+          break;
+        }
+        console.log(`[crawler:search] Clicking load-more (click #${clicks + 1})...`);
+        await btn.click();
+        await delay(3000);
+        clicks++;
+      }
       const links = await extractProductLinks(page, linkSelector, config.baseUrl);
+      console.log(`[crawler:search] Extracted ${links.length} links after load-more`);
       for (const link of links) found.add(link);
+      // Navega para about:blank para matar timers/XHRs antes do teardown
+      try { await withTimeout(page.goto("about:blank"), 5000, "about:blank"); } catch {}
+    } else {
+      for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+        const links = await extractProductLinks(page, linkSelector, config.baseUrl);
+        console.log(`[crawler:search] Page ${pageNum}: extracted ${links.length} links`);
+        for (const link of links) found.add(link);
 
-      if (pageNum >= maxPages || !nextSelector) break;
+        if (pageNum >= maxPages || !nextSelector) break;
 
-      const nextBtn = await page.$(nextSelector);
-      if (!nextBtn) break;
+        const nextBtn = await page.$(nextSelector);
+        if (!nextBtn) {
+          console.log(`[crawler:search] No next-page button found, stopping at page ${pageNum}`);
+          break;
+        }
 
-      const nextLinks = await page.$$eval(nextSelector, (els) =>
-        els.map((el) => (el as HTMLAnchorElement).href)
-      );
-      const nextPageUrl = nextLinks.find(
-        (href) => href && !href.includes(`page=${pageNum}`)
-      );
-      if (!nextPageUrl) break;
+        const nextLinks = await page.$$eval(nextSelector, (els) =>
+          els.map((el) => (el as HTMLAnchorElement).href)
+        );
+        const nextPageUrl = nextLinks.find(
+          (href) => href && !href.includes(`page=${pageNum}`)
+        );
+        if (!nextPageUrl) {
+          console.log(`[crawler:search] No next-page URL found, stopping at page ${pageNum}`);
+          break;
+        }
 
-      await page.goto(nextPageUrl, {
-        waitUntil: "domcontentloaded",
-        timeout: 30_000,
-      });
-      await page.waitForTimeout(2000);
+        console.log(`[crawler:search] Navigating to page ${pageNum + 1}: ${nextPageUrl}`);
+        await page.goto(nextPageUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: 30_000,
+        });
+        await delay(2000);
+      }
     }
 
-    await context.close();
+    try {
+      await withTimeout(context.close(), 10_000, `context.close (${config.brand})`);
+    } catch (err) {
+      console.warn(`[crawler:search] context.close stalled for ${config.brand}:`, err);
+    }
   } finally {
-    await browser.close();
+    try {
+      await withTimeout(browser.close(), 10_000, `browser.close (${config.brand})`);
+    } catch (err) {
+      console.warn(`[crawler:search] browser.close stalled for ${config.brand}, killing process:`, err);
+      // Força kill do processo do Chromium para liberar o worker
+      try {
+        const proc = (browser as unknown as { process?: () => { kill: (sig: string) => void } | null }).process?.();
+        proc?.kill("SIGKILL");
+      } catch {}
+    }
   }
 
   console.log(

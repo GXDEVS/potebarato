@@ -1,89 +1,9 @@
 {
-  "id": "f8a47f3c-bb10-4ba1-a2db-d453f504e7b8",
-  "prevId": "866d524d-4931-453e-905b-688da593e7a0",
+  "id": "fb601e1c-fefe-4dff-b995-78dd8aaf45af",
+  "prevId": "002b4765-1fb2-44cd-bacd-36c25754340c",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.price_history": {
-      "name": "price_history",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "product_id": {
-          "name": "product_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "total_price": {
-          "name": "total_price",
-          "type": "numeric(10, 2)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "price_per_gram": {
-          "name": "price_per_gram",
-          "type": "numeric(10, 6)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "scraped_at": {
-          "name": "scraped_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "idx_price_history_product_scraped": {
-          "name": "idx_price_history_product_scraped",
-          "columns": [
-            {
-              "expression": "product_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "scraped_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "price_history_product_id_products_id_fk": {
-          "name": "price_history_product_id_products_id_fk",
-          "tableFrom": "price_history",
-          "tableTo": "products",
-          "columnsFrom": [
-            "product_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.products": {
       "name": "products",
       "schema": "",
@@ -112,6 +32,12 @@
           "type": "numeric(10, 2)",
           "primaryKey": false,
           "notNull": true
+        },
+        "cash_price": {
+          "name": "cash_price",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": false
         },
         "weight_grams": {
           "name": "weight_grams",
@@ -151,6 +77,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "purity_label": {
+          "name": "purity_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "last_update": {
           "name": "last_update",
           "type": "timestamp with time zone",
@@ -158,53 +90,7 @@
           "notNull": true
         }
       },
-      "indexes": {
-        "idx_products_brand": {
-          "name": "idx_products_brand",
-          "columns": [
-            {
-              "expression": "brand",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_products_last_update": {
-          "name": "idx_products_last_update",
-          "columns": [
-            {
-              "expression": "last_update",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_products_product_name": {
-          "name": "idx_products_product_name",
-          "columns": [
-            {
-              "expression": "product_name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {

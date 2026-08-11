@@ -1,5 +1,5 @@
 {
-  "id": "866d524d-4931-453e-905b-688da593e7a0",
+  "id": "002b4765-1fb2-44cd-bacd-36c25754340c",
   "prevId": "b066861e-8b0a-4dba-a367-50080f042a10",
   "version": "7",
   "dialect": "postgresql",
@@ -71,6 +71,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "purity_label": {
+          "name": "purity_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "last_update": {
           "name": "last_update",
           "type": "timestamp with time zone",
@@ -78,53 +84,7 @@
           "notNull": true
         }
       },
-      "indexes": {
-        "idx_products_brand": {
-          "name": "idx_products_brand",
-          "columns": [
-            {
-              "expression": "brand",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_products_last_update": {
-          "name": "idx_products_last_update",
-          "columns": [
-            {
-              "expression": "last_update",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_products_product_name": {
-          "name": "idx_products_product_name",
-          "columns": [
-            {
-              "expression": "product_name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {

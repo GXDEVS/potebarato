@@ -72,12 +72,13 @@ app.get("/api/landing/products", async (c) => {
       brand: products.brand,
       productName: products.productName,
       totalPrice: products.totalPrice,
+      cashPrice: products.cashPrice,
       weightGrams: products.weightGrams,
       pricePerGram: products.pricePerGram,
       inStock: products.inStock,
       url: products.url,
       imageUrl: products.imageUrl,
-      previousPrice: products.previousPrice,
+      purityLabel: products.purityLabel,
     })
     .from(products)
     .orderBy(desc(products.lastUpdate));

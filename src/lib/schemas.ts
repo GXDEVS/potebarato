@@ -5,12 +5,14 @@ export const ProductSchema = z.object({
   brand: z.string(),
   productName: z.string(),
   totalPrice: z.string(),
+  cashPrice: z.string().nullable(),
   weightGrams: z.number(),
   pricePerGram: z.string(),
   currency: z.string(),
   inStock: z.boolean(),
   url: z.string().url(),
-  imageUrl: z.string().nullable(),
+  imageUrl: z.string().url().nullable(),
+  purityLabel: z.string().nullable(),
   lastUpdate: z.string().datetime(),
 });
 
