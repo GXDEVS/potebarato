@@ -7,6 +7,8 @@ const HEADERS = { "User-Agent": "potebarato-bot/1.0" };
 const FETCH_TIMEOUT = 10_000;     // Timeout para requests de sitemap/HEAD (ms)
 const HEAD_CONCURRENCY = 10;      // Requests HEAD simultaneos para validacao
 const SEARCH_QUERY = "creatina";  // Termo de busca nos sites
+const MAX_URLS_PER_SITE = 500;    // Limite de URLs por site para evitar OOM
+const MAX_SITEMAP_DEPTH = 3;      // Profundidade maxima de sitemapindex recursivo
 
 /** Extrai URLs de sitemaps do robots.txt */
 export function extractSitemapUrls(robotsTxt: string): string[] {
@@ -85,10 +87,20 @@ async function fetchText(url: string, retries = 3): Promise<string> {
   throw new Error(`Fetch failed after ${retries} retries: ${url}`);
 }
 
-async function expandSitemaps(sitemapUrls: string[]): Promise<string[]> {
+async function expandSitemaps(sitemapUrls: string[], depth = 0): Promise<string[]> {
+  if (depth >= MAX_SITEMAP_DEPTH) {
+    console.warn(`[crawler] Max sitemap depth (${MAX_SITEMAP_DEPTH}) reached, stopping recursion`);
+    return [];
+  }
+
   const allProductUrls: string[] = [];
 
   for (let i = 0; i < sitemapUrls.length; i += 5) {
+    if (allProductUrls.length >= MAX_URLS_PER_SITE) {
+      console.warn(`[crawler] URL limit (${MAX_URLS_PER_SITE}) reached in sitemap expansion`);
+      break;
+    }
+
     const batch = sitemapUrls.slice(i, i + 5);
     const results = await Promise.allSettled(
       batch.map(async (url) => {
@@ -107,7 +119,7 @@ async function expandSitemaps(sitemapUrls: string[]): Promise<string[]> {
         const productSitemaps = parsed.urls.filter((u) =>
           u.includes("product")
         );
-        const nested = await expandSitemaps(productSitemaps);
+        const nested = await expandSitemaps(productSitemaps, depth + 1);
         allProductUrls.push(...nested);
       } else {
         allProductUrls.push(...parsed.urls);
@@ -115,7 +127,7 @@ async function expandSitemaps(sitemapUrls: string[]): Promise<string[]> {
     }
   }
 
-  return allProductUrls;
+  return allProductUrls.slice(0, MAX_URLS_PER_SITE);
 }
 
 /** Verifica se a URL responde com status 2xx via HEAD request */

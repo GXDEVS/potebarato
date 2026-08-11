@@ -10,6 +10,7 @@ export const ProductSchema = z.object({
   currency: z.string(),
   inStock: z.boolean(),
   url: z.string().url(),
+  imageUrl: z.string().nullable(),
   lastUpdate: z.string().datetime(),
 });
 

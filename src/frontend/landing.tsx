@@ -1,5 +1,138 @@
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { createRoot } from "react-dom/client";
+
+interface PricePoint {
+  totalPrice: string;
+  pricePerGram: string;
+  scrapedAt: string;
+}
+
+function PriceHistoryModal({ product, onClose }: { product: Product; onClose: () => void }) {
+  const [history, setHistory] = useState<PricePoint[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/landing/products/${product.id}/history`)
+      .then((r) => r.json())
+      .then((data: PricePoint[]) => setHistory(data))
+      .catch(() => setHistory([]))
+      .finally(() => setLoading(false));
+  }, [product.id]);
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  const prices = history.map((h) => parseFloat(h.totalPrice));
+  const minP = Math.min(...prices);
+  const maxP = Math.max(...prices);
+  const currentPrice = parseFloat(product.totalPrice);
+
+  // SVG chart
+  const W = 400;
+  const H = 160;
+  const PAD = 30;
+
+  const points = history.length > 1
+    ? history.map((h, i) => {
+        const x = PAD + ((W - PAD * 2) / (history.length - 1)) * i;
+        const range = maxP - minP || 1;
+        const y = H - PAD - ((parseFloat(h.totalPrice) - minP) / range) * (H - PAD * 2);
+        return { x, y, price: parseFloat(h.totalPrice), date: h.scrapedAt };
+      }).reverse()
+    : [];
+
+  const polyline = points.map((p) => `${p.x},${p.y}`).join(" ");
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-[#141414] border border-[#262626] rounded-2xl max-w-lg w-full p-6 space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-emerald-500 font-semibold">{product.brand}</div>
+            <h3 className="text-base font-bold text-white line-clamp-1">{product.productName}</h3>
+          </div>
+          <button type="button" onClick={onClose} className="text-zinc-500 hover:text-white transition text-xl" aria-label="Fechar">
+            &times;
+          </button>
+        </div>
+
+        <div className="flex gap-4 text-sm">
+          <div>
+            <span className="text-zinc-500">Atual: </span>
+            <span className="text-white font-bold">R$ {currentPrice.toFixed(2)}</span>
+          </div>
+          {prices.length > 1 && (
+            <>
+              <div>
+                <span className="text-zinc-500">Min: </span>
+                <span className="text-emerald-400 font-medium">R$ {minP.toFixed(2)}</span>
+              </div>
+              <div>
+                <span className="text-zinc-500">Max: </span>
+                <span className="text-red-400 font-medium">R$ {maxP.toFixed(2)}</span>
+              </div>
+            </>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="h-40 flex items-center justify-center text-zinc-500 text-sm">Carregando histórico...</div>
+        ) : history.length <= 1 ? (
+          <div className="h-40 flex items-center justify-center text-zinc-500 text-sm">
+            Histórico de preços disponível após o próximo scraping
+          </div>
+        ) : (
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 180 }}>
+            {/* Grid lines */}
+            {[0, 0.25, 0.5, 0.75, 1].map((pct) => {
+              const y = PAD + (H - PAD * 2) * (1 - pct);
+              const price = minP + (maxP - minP) * pct;
+              return (
+                <g key={pct}>
+                  <line x1={PAD} y1={y} x2={W - PAD} y2={y} stroke="#262626" strokeWidth="1" />
+                  <text x={PAD - 4} y={y + 3} fill="#71717a" fontSize="9" textAnchor="end">
+                    {price.toFixed(0)}
+                  </text>
+                </g>
+              );
+            })}
+            {/* Line */}
+            <polyline points={polyline} fill="none" stroke="#10b981" strokeWidth="2" strokeLinejoin="round" />
+            {/* Dots */}
+            {points.map((p, i) => (
+              <circle key={i} cx={p.x} cy={p.y} r="3" fill="#10b981" stroke="#141414" strokeWidth="1.5" />
+            ))}
+            {/* Date labels */}
+            {points.filter((_, i) => i === 0 || i === points.length - 1).map((p, i) => (
+              <text key={i} x={p.x} y={H - 8} fill="#71717a" fontSize="8" textAnchor="middle">
+                {new Date(p.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+              </text>
+            ))}
+          </svg>
+        )}
+
+        <a
+          href={product.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block text-center bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2.5 rounded-lg transition"
+        >
+          Ver na loja
+        </a>
+      </div>
+    </div>
+  );
+}
 
 interface Product {
   id: string;
@@ -11,6 +144,15 @@ interface Product {
   inStock: boolean;
   url: string;
   imageUrl: string | null;
+  previousPrice: string | null;
+}
+
+function getPriceDrop(product: Product): number | null {
+  if (!product.previousPrice) return null;
+  const prev = parseFloat(product.previousPrice);
+  const curr = parseFloat(product.totalPrice);
+  if (prev <= 0 || prev === curr) return null;
+  return Math.round(((prev - curr) / prev) * 100);
 }
 
 type SortKey = "price" | "pricePerGram" | "weight";
@@ -277,12 +419,24 @@ function HighlightCard({
 
 function PriceComparator({ products }: { products: Product[] }) {
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [brandFilter, setBrandFilter] = useState("all");
   const [stockOnly, setStockOnly] = useState(false);
+  const [dealsOnly, setDealsOnly] = useState(false);
   const [sortBy, setSortBy] = useState<SortKey>("pricePerGram");
   const [compareIds, setCompareIds] = useState<Set<string>>(new Set());
   const [showCompare, setShowCompare] = useState(false);
+  const [compareLimitHit, setCompareLimitHit] = useState(false);
+  const [historyProduct, setHistoryProduct] = useState<Product | null>(null);
   const compareRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Debounce search input
+  const handleSearch = (value: string) => {
+    setSearch(value);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedSearch(value), 300);
+  };
 
   const brands = useMemo(
     () => [...new Set(products.map((p) => p.brand))].sort(),
@@ -291,8 +445,8 @@ function PriceComparator({ products }: { products: Product[] }) {
 
   const filtered = useMemo(() => {
     let list = [...products];
-    if (search) {
-      const q = search.toLowerCase();
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase();
       list = list.filter(
         (p) =>
           p.productName.toLowerCase().includes(q) ||
@@ -305,13 +459,16 @@ function PriceComparator({ products }: { products: Product[] }) {
     if (stockOnly) {
       list = list.filter((p) => p.inStock);
     }
+    if (dealsOnly) {
+      list = list.filter((p) => { const d = getPriceDrop(p); return d !== null && d > 0; });
+    }
     list.sort((a, b) => {
       if (sortBy === "price") return parseFloat(a.totalPrice) - parseFloat(b.totalPrice);
       if (sortBy === "pricePerGram") return parseFloat(a.pricePerGram) - parseFloat(b.pricePerGram);
       return b.weightGrams - a.weightGrams;
     });
     return list;
-  }, [products, search, brandFilter, stockOnly, sortBy]);
+  }, [products, debouncedSearch, brandFilter, stockOnly, dealsOnly, sortBy]);
 
   const bestByPrice = useMemo(() => {
     if (filtered.length === 0) return null;
@@ -335,8 +492,16 @@ function PriceComparator({ products }: { products: Product[] }) {
   function toggleCompare(id: string) {
     setCompareIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else if (next.size < 4) next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+        setCompareLimitHit(false);
+      } else if (next.size < 4) {
+        next.add(id);
+        setCompareLimitHit(false);
+      } else {
+        setCompareLimitHit(true);
+        setTimeout(() => setCompareLimitHit(false), 2000);
+      }
       return next;
     });
   }
@@ -364,8 +529,9 @@ function PriceComparator({ products }: { products: Product[] }) {
             type="text"
             placeholder="Buscar produto ou marca..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => handleSearch(e.target.value)}
             className="flex-1 min-w-[200px] bg-[#141414] border border-[#262626] rounded-lg px-4 py-2.5 text-sm text-white placeholder-zinc-500 outline-none focus:border-emerald-500/50 transition"
+            aria-label="Buscar produto ou marca"
           />
           <select
             value={brandFilter}
@@ -387,6 +553,7 @@ function PriceComparator({ products }: { products: Product[] }) {
             <option value="weight">Maior peso</option>
           </select>
           <button
+            type="button"
             onClick={() => setStockOnly(!stockOnly)}
             className={`px-4 py-2.5 rounded-lg text-sm font-medium border transition ${
               stockOnly
@@ -395,6 +562,17 @@ function PriceComparator({ products }: { products: Product[] }) {
             }`}
           >
             Em estoque
+          </button>
+          <button
+            type="button"
+            onClick={() => setDealsOnly(!dealsOnly)}
+            className={`px-4 py-2.5 rounded-lg text-sm font-medium border transition ${
+              dealsOnly
+                ? "bg-green-500/10 border-green-500/30 text-green-400"
+                : "bg-[#141414] border-[#262626] text-zinc-400"
+            }`}
+          >
+            Promoções
           </button>
         </div>
 
@@ -451,6 +629,7 @@ function PriceComparator({ products }: { products: Product[] }) {
             const isSelected = compareIds.has(p.id);
             const isBestPrice = bestByPrice?.id === p.id;
             const isBestValue = bestByValue?.id === p.id;
+            const priceDrop = getPriceDrop(p);
             const rank = i + 1;
 
             return (
@@ -514,6 +693,16 @@ function PriceComparator({ products }: { products: Product[] }) {
                         Melhor custo
                       </span>
                     )}
+                    {priceDrop !== null && priceDrop > 0 && (
+                      <span className="text-[10px] bg-green-500/10 text-green-400 px-1.5 py-0.5 rounded-full font-medium">
+                        ▼ {priceDrop}%
+                      </span>
+                    )}
+                    {priceDrop !== null && priceDrop < 0 && (
+                      <span className="text-[10px] bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded-full font-medium">
+                        ▲ {Math.abs(priceDrop)}%
+                      </span>
+                    )}
                     {!p.inStock && (
                       <span className="text-[10px] bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded-full font-medium">
                         Indisponível
@@ -529,6 +718,9 @@ function PriceComparator({ products }: { products: Product[] }) {
                   {/* Price row */}
                   <div className="flex items-baseline justify-between mb-1">
                     <span className="text-xl font-bold text-white">R$ {price.toFixed(2)}</span>
+                    {priceDrop !== null && priceDrop > 0 && p.previousPrice && (
+                      <span className="text-xs text-zinc-500 line-through ml-1.5">R$ {parseFloat(p.previousPrice).toFixed(2)}</span>
+                    )}
                     <span className="text-xs text-zinc-500 bg-[#0a0a0a] px-2 py-1 rounded-md">{p.weightGrams}g</span>
                   </div>
 
@@ -543,14 +735,23 @@ function PriceComparator({ products }: { products: Product[] }) {
                       <span className={`w-1.5 h-1.5 rounded-full ${p.inStock ? "bg-emerald-500" : "bg-zinc-600"}`} />
                       <span className="text-xs text-zinc-500">{p.inStock ? "Em estoque" : "Indisponível"}</span>
                     </div>
-                    <a
-                      href={p.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs font-medium text-zinc-400 hover:text-emerald-400 transition"
-                    >
-                      Ver na loja →
-                    </a>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setHistoryProduct(p)}
+                        className="text-xs font-medium text-zinc-500 hover:text-emerald-400 transition"
+                      >
+                        Histórico
+                      </button>
+                      <a
+                        href={p.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-medium text-zinc-400 hover:text-emerald-400 transition"
+                      >
+                        Ver na loja →
+                      </a>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -591,6 +792,9 @@ function PriceComparator({ products }: { products: Product[] }) {
               <span className="text-sm text-zinc-300">
                 {compareIds.size} produto{compareIds.size > 1 ? "s" : ""}
                 <span className="text-zinc-600 ml-1 hidden sm:inline">selecionado{compareIds.size > 1 ? "s" : ""}</span>
+                {compareLimitHit && (
+                  <span className="ml-2 text-xs text-yellow-400" role="status">Máximo de 4</span>
+                )}
               </span>
             </div>
             <div className="flex items-center gap-3">
@@ -609,6 +813,9 @@ function PriceComparator({ products }: { products: Product[] }) {
             </div>
           </div>
         </div>
+      )}
+      {historyProduct && (
+        <PriceHistoryModal product={historyProduct} onClose={() => setHistoryProduct(null)} />
       )}
     </section>
   );
@@ -788,6 +995,7 @@ function Landing() {
   } | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -796,13 +1004,21 @@ function Landing() {
           fetch("/api/scrape/status"),
           fetch("/api/landing/products"),
         ]);
+        if (!statsRes.ok || !productsRes.ok) {
+          setFetchError(true);
+          setLoading(false);
+          return;
+        }
         const [statsData, productsData] = await Promise.all([
           statsRes.json() as Promise<{ total_products: number; last_update: string | null }>,
           productsRes.json() as Promise<Product[]>,
         ]);
         setStats(statsData);
         setProducts(productsData);
-      } catch {}
+      } catch (err) {
+        console.error("[landing] Failed to fetch data:", err);
+        setFetchError(true);
+      }
       setLoading(false);
     };
     fetchData();
@@ -865,7 +1081,9 @@ function Landing() {
                 <div className="text-xs sm:text-sm text-zinc-400">Produtos</div>
               </div>
               <div className="bg-[#141414] border border-[#262626] rounded-xl px-3 sm:px-6 py-3 sm:py-4">
-                <div className="text-xl sm:text-2xl font-bold text-emerald-500">3</div>
+                <div className="text-xl sm:text-2xl font-bold text-emerald-500">
+                  {new Set(products.map((p) => p.brand)).size || "—"}
+                </div>
                 <div className="text-xs sm:text-sm text-zinc-400">Marcas</div>
               </div>
               <div className="bg-[#141414] border border-[#262626] rounded-xl px-3 sm:px-6 py-3 sm:py-4">
@@ -892,14 +1110,32 @@ function Landing() {
         </div>
       </main>
 
-      <section className="marquee-section">
-        <h2 className="marquee-title">
-          Produtos monitorados em <span className="text-emerald-500">tempo real</span>
-        </h2>
-        {loading ? <MarqueeSkeleton /> : products.length > 0 ? <Marquee products={products} /> : null}
-      </section>
+      {fetchError ? (
+        <div className="py-20 px-4 text-center">
+          <div className="max-w-md mx-auto bg-red-950/50 border border-red-800/50 rounded-xl p-8">
+            <p className="text-red-400 font-medium mb-2">Erro ao carregar produtos</p>
+            <p className="text-sm text-zinc-400 mb-4">Não foi possível conectar ao servidor. Tente novamente.</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="text-sm bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition"
+            >
+              Recarregar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <section className="marquee-section">
+            <h2 className="marquee-title">
+              Produtos monitorados em <span className="text-emerald-500">tempo real</span>
+            </h2>
+            {loading ? <MarqueeSkeleton /> : products.length > 0 ? <Marquee products={products} /> : null}
+          </section>
 
-      {loading ? <ComparatorSkeleton /> : products.length > 0 ? <PriceComparator products={products} /> : null}
+          {loading ? <ComparatorSkeleton /> : products.length > 0 ? <PriceComparator products={products} /> : null}
+        </>
+      )}
 
       <section className="py-20 px-4 border-t border-[#262626]">
         <div className="max-w-4xl mx-auto">

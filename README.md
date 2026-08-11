@@ -355,7 +355,7 @@ O servidor iniciará em `http://localhost:3000`.
 Crie um arquivo `.env` na raiz do projeto:
 
 ```env
-DATABASE_URL=postgresql://usuario:senha@host/banco
+DATABASE_URL=postgresql://usuário:senha@host/banco
 BETTER_AUTH_SECRET=sua_chave_secreta_aqui
 BETTER_AUTH_URL=https://seu-dominio.com
 ```

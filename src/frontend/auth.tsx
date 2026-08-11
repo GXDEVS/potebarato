@@ -66,8 +66,9 @@ function AuthPage() {
         >
           {!isLogin && (
             <div>
-              <label className="block text-sm text-zinc-400 mb-1">Nome</label>
+              <label htmlFor="auth-name" className="block text-sm text-zinc-400 mb-1">Nome</label>
               <input
+                id="auth-name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -78,8 +79,9 @@ function AuthPage() {
             </div>
           )}
           <div>
-            <label className="block text-sm text-zinc-400 mb-1">Email</label>
+            <label htmlFor="auth-email" className="block text-sm text-zinc-400 mb-1">Email</label>
             <input
+              id="auth-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -89,8 +91,9 @@ function AuthPage() {
             />
           </div>
           <div>
-            <label className="block text-sm text-zinc-400 mb-1">Senha</label>
+            <label htmlFor="auth-password" className="block text-sm text-zinc-400 mb-1">Senha</label>
             <input
+              id="auth-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

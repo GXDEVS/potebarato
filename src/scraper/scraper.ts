@@ -17,6 +17,25 @@ interface JsonLdExtracted {
   imageUrl: string | null;
 }
 
+interface JsonLdOffer {
+  price?: unknown;
+  priceCurrency?: string;
+  availability?: string;
+}
+
+interface JsonLdData {
+  "@type"?: string;
+  name?: string;
+  brand?: { name?: string } | string;
+  image?: unknown;
+  offers?: JsonLdOffer | JsonLdOffer[];
+  hasVariant?: Array<{
+    name?: string;
+    offers?: JsonLdOffer | JsonLdOffer[];
+    image?: unknown;
+  }>;
+}
+
 /** Converte preco no formato brasileiro (R$1.299,00) para number */
 export function parsePrice(raw: string): number {
   let cleaned = raw.replace(/R\$\s*/g, "").trim();
@@ -63,40 +82,48 @@ function extractImageUrl(data: Record<string, unknown>): string | null {
   return null;
 }
 
-function extractFromProduct(data: Record<string, unknown>): JsonLdExtracted | null {
+function getBrandName(brand: unknown): string {
+  if (typeof brand === "string") return brand;
+  if (brand && typeof brand === "object" && "name" in brand) return String((brand as { name?: string }).name ?? "");
+  return "";
+}
+
+function extractFromProduct(data: JsonLdData): JsonLdExtracted | null {
   const offer = Array.isArray(data.offers)
     ? data.offers[0]
     : data.offers;
-  if (!offer) return null;
+  if (!offer?.price) return null;
+  if (!data.name) return null;
   return {
-    name: data.name as string,
-    brand: (data.brand as any)?.name ?? "",
+    name: data.name,
+    brand: getBrandName(data.brand),
     price: parseFloat(String(offer.price)),
     currency: offer.priceCurrency ?? "BRL",
     inStock: String(offer.availability ?? "").includes("InStock"),
-    imageUrl: extractImageUrl(data),
+    imageUrl: extractImageUrl(data as Record<string, unknown>),
   };
 }
 
-function extractFromProductGroup(data: Record<string, unknown>): JsonLdExtracted | null {
-  const variant = (data as any).hasVariant?.[0];
+function extractFromProductGroup(data: JsonLdData): JsonLdExtracted | null {
+  const variant = data.hasVariant?.[0];
   if (!variant?.offers) return null;
   const offer = Array.isArray(variant.offers)
     ? variant.offers[0]
     : variant.offers;
+  if (!offer?.price) return null;
   return {
-    name: variant.name ?? (data.name as string),
-    brand: (data.brand as any)?.name ?? "",
+    name: variant.name ?? data.name ?? "",
+    brand: getBrandName(data.brand) ?? "",
     price: parseFloat(String(offer.price)),
     currency: offer.priceCurrency ?? "BRL",
     inStock: String(offer.availability ?? "").includes("InStock"),
-    imageUrl: extractImageUrl(variant) ?? extractImageUrl(data),
+    imageUrl: extractImageUrl(variant as unknown as Record<string, unknown>) ?? extractImageUrl(data as Record<string, unknown>),
   };
 }
 
 /** Seleciona a funcao de extracao correta baseado na estrategia do site */
 function matchJsonLdItem(
-  data: Record<string, unknown>,
+  data: JsonLdData,
   strategy: SiteConfig["jsonLdStrategy"]
 ): JsonLdExtracted | null {
   if (strategy === "product" && data["@type"] === "Product") {
