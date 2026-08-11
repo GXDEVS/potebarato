@@ -5,9 +5,9 @@ export const darklab: SiteConfig = {
   brand: "Dark Lab",
   jsonLdStrategy: "product",
   selectors: {
-    productName: "h1",
-    price: ".ec-price-custom__pix-value",
-    inStock: ".product-form__submit",
+    productName: ".product__title h1, .product__title .h3",
+    price: ".product__info-wrapper .price-item--sale.price-item--last",
+    inStock: "[name='add']:not([disabled])",
   },
   search: {
     path: "/search?q={query}&type=product",

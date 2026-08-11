@@ -3,8 +3,10 @@ export interface SearchConfig {
   path: string;
   /** CSS selector for product links in search results */
   linkSelector: string;
-  /** CSS selector for "next page" button (optional, for pagination) */
+  /** CSS selector for "next page" link (optional, for classic pagination) */
   nextPageSelector?: string;
+  /** CSS selector for JS "load more" button (optional, clicked until gone) */
+  loadMoreSelector?: string;
   /** Max pages to follow during search pagination */
   maxPages?: number;
 }
@@ -40,5 +42,6 @@ export interface ProductData {
   inStock: boolean;
   url: string;
   imageUrl: string | null;
+  purityLabel: string | null;
   lastUpdate: Date;
 }

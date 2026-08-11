@@ -22,7 +22,7 @@ export const products = pgTable("products", {
   inStock: boolean("in_stock").notNull().default(true),
   url: text("url").notNull().unique(),
   imageUrl: text("image_url"),
-  previousPrice: numeric("previous_price", { precision: 10, scale: 2 }),
+  purityLabel: text("purity_label"),
   lastUpdate: timestamp("last_update", { withTimezone: true }).notNull(),
 }, (t) => [
   index("idx_products_brand").on(t.brand),

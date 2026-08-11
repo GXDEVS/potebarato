@@ -46,6 +46,19 @@ export function parsePrice(raw: string): number {
   return parseFloat(cleaned);
 }
 
+/**
+ * Extrai o selo/label de pureza do nome do produto e URL.
+ * - "Creapure" → certificação alemã, 99.99%+ de pureza
+ * - "100% Pura" / "99%" → claim declarado pelo fabricante
+ */
+export function extractPurityLabel(name: string, url: string = ""): string | null {
+  const combined = `${name} ${url}`;
+  if (/creapure/i.test(combined)) return "Creapure";
+  const pct = name.match(/(\d{2,3}(?:[.,]\d+)?)\s*%\s*(?:pura?|pureza)/i);
+  if (pct) return pct[0].replace(/\s+/, " ").trim();
+  return null;
+}
+
 /** Extrai peso em gramas do nome do produto (ex: "Creatina 1Kg" → 1000, "500g" → 500) */
 export function extractWeightGrams(name: string): number | null {
   const kgMatch = name.match(/(\d+(?:[.,]\d+)?)\s*kg/i);
@@ -129,8 +142,12 @@ export function extractJsonLdProduct(
 ): JsonLdExtracted | null {
   for (const raw of scripts) {
     try {
-      const parsed = JSON.parse(raw);
-      const items: JsonLdData[] = Array.isArray(parsed) ? parsed : [parsed];
+      // Sanitize escaped slashes and invalid leading-zero numbers (e.g. gtin13: 0602...)
+      const sanitized = raw
+        .replace(/\\\//g, "/")
+        .replace(/:\s*0(\d+)/g, ': "$1"');
+      const parsed = JSON.parse(sanitized);
+      const items = Array.isArray(parsed) ? parsed : [parsed];
       for (const data of items) {
         const result = matchJsonLdItem(data, strategy);
         if (result) return result;
@@ -279,8 +296,16 @@ async function scrapePage(
     inStock,
     url,
     imageUrl,
+    purityLabel: extractPurityLabel(name, url),
     lastUpdate: new Date(),
   };
+}
+
+async function newContext(browser: Browser) {
+  return browser.newContext({
+    viewport: { width: 1280, height: 800 },
+    extraHTTPHeaders: { "Accept-Language": "pt-BR,pt;q=0.9" },
+  });
 }
 
 async function processQueue(
@@ -288,17 +313,12 @@ async function processQueue(
   urls: string[],
   config: SiteConfig
 ): Promise<ProductData[]> {
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 800 },
-    extraHTTPHeaders: {
-      "Accept-Language": "pt-BR,pt;q=0.9",
-    },
-  });
-  const page = await context.newPage();
+  let context = await newContext(browser);
   const results: ProductData[] = [];
 
   for (const url of urls) {
     let product: ProductData | null = null;
+    let page = await context.newPage();
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         product = await scrapePage(page, url, config);
@@ -311,18 +331,26 @@ async function processQueue(
         if (attempt < MAX_RETRIES) {
           console.log(`[scraper] Retry ${attempt + 1}/${MAX_RETRIES} for ${url}`);
           await delay(3000 * (attempt + 1));
+          try { await page.close(); } catch {}
+          // Se o context fechou junto, recria tudo
+          try {
+            page = await context.newPage();
+          } catch {
+            try { await context.close(); } catch {}
+            context = await newContext(browser);
+            page = await context.newPage();
+          }
         } else {
           console.error(`[scraper] Failed to scrape ${url} after ${MAX_RETRIES} retries:`, error);
         }
       }
     }
-    if (product) {
-      results.push(product);
-    }
+    try { await page.close(); } catch {}
+    if (product) results.push(product);
     await randomDelay();
   }
 
-  await context.close();
+  try { await context.close(); } catch {}
   return results;
 }
 

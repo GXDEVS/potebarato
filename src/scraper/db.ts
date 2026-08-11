@@ -26,20 +26,19 @@ export async function upsertProducts(data: ProductData[]): Promise<number> {
     // Upsert products
     await db
       .insert(products)
-      .values(
-        chunk.map((product) => ({
-          brand: product.brand,
-          productName: product.productName,
-          totalPrice: product.totalPrice.toFixed(2),
-          weightGrams: product.weightGrams,
-          pricePerGram: product.pricePerGram.toFixed(6),
-          currency: product.currency,
-          inStock: product.inStock,
-          url: product.url,
-          imageUrl: product.imageUrl,
-          lastUpdate: product.lastUpdate,
-        }))
-      )
+      .values({
+        brand: product.brand,
+        productName: product.productName,
+        totalPrice: product.totalPrice.toFixed(2),
+        weightGrams: product.weightGrams,
+        pricePerGram: product.pricePerGram.toFixed(6),
+        currency: product.currency,
+        inStock: product.inStock,
+        url: product.url,
+        imageUrl: product.imageUrl,
+        purityLabel: product.purityLabel,
+        lastUpdate: product.lastUpdate,
+      })
       .onConflictDoUpdate({
         target: products.url,
         set: {
@@ -52,6 +51,7 @@ export async function upsertProducts(data: ProductData[]): Promise<number> {
           currency: sql`excluded.currency`,
           inStock: sql`excluded.in_stock`,
           imageUrl: sql`excluded.image_url`,
+          purityLabel: sql`excluded.purity_label`,
           lastUpdate: sql`excluded.last_update`,
         },
       });
