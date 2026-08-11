@@ -71,6 +71,9 @@ const honoFetch = app.fetch;
 
 export default {
   port: 3000,
+  // Bun default é 10s — rotas como /api/scrape disparam trabalho longo e
+  // respostas de catálogo podem demorar em cold start do Postgres.
+  idleTimeout: 120,
   async fetch(req: Request, server: any) {
     const url = new URL(req.url);
 

@@ -10,6 +10,8 @@ export const masterway: SiteConfig = {
     price: ".product-pix-value",
     inStock: "#button-cart",
   },
+  // Masterway expõe .product-pix-value (5% off). JSON-LD traz o preço cheio.
+  pixSelector: ".product-pix-value",
   // Sitemap apontado em robots.txt vai para domínio externo (demo.vowt.com.br).
   // Usa descoberta via página de categoria que lista todos os produtos.
   search: {

@@ -9,6 +9,8 @@ export const soldiers: SiteConfig = {
     price: ".ec-price-custom__pix-value",
     inStock: ".product-form__submit",
   },
+  // Ecwid renderiza o preço de PIX em .ec-price-custom__pix-value após JS.
+  pixSelector: ".ec-price-custom__pix-value, .ec-payment-pix-value",
   search: {
     path: "/search?q={query}&type=product",
     linkSelector: 'a[href*="/products/"]',

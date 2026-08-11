@@ -7,9 +7,13 @@ export const maxtitanium: SiteConfig = {
   jsonLdStrategy: "product-group",
   selectors: {
     productName: "h1",
-    price: "span[style]:not([class])",
+    // IDs têm sufixo "-product-list-price" (preço cheio) e
+    // "-product-promotional-price" (preço com desconto PIX exibido como
+    // "R$ X,XX No Pix").
+    price: "[id$='-product-list-price']",
     inStock: "button[class*='buy']:not([disabled])",
   },
+  pixSelector: "[id$='-product-promotional-price']",
   // Sitemap disponível em /sitemap.xml
   search: {
     path: "/produtos/aminoacidos/creatina",

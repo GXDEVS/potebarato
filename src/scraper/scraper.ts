@@ -17,10 +17,17 @@ interface JsonLdExtracted {
   imageUrl: string | null;
 }
 
-/** Converte preco no formato brasileiro (R$1.299,00) para number */
+/**
+ * Converte preco no formato brasileiro (R$1.299,00) para number.
+ * Estrategia: isolar o primeiro trecho numerico apos "R$" (ou o primeiro
+ * numero que encontrar) e normalizar vírgula/ponto. Isso evita lidar com
+ * sufixos como "5% OFF", "no Pix" ou prefixos como "Preço à vista:".
+ */
 export function parsePrice(raw: string): number {
-  let cleaned = raw.replace(/R\$\s*/g, "").trim();
-  cleaned = cleaned.replace(/\s+\d+%.*$/i, "").trim();
+  const afterCurrency = raw.match(/R\$\s*([\d.,]+)/);
+  const match = afterCurrency ?? raw.match(/(\d[\d.,]*)/);
+  if (!match) return NaN;
+  let cleaned = match[1]!.replace(/[,.]+$/, "");
   if (cleaned.includes(",")) {
     cleaned = cleaned.replace(/\./g, "").replace(",", ".");
   }
@@ -206,6 +213,19 @@ async function scrapePage(
     timeout: PAGE_TIMEOUT,
   });
 
+  // Espera o nome do produto aparecer — cobre SPAs React/Next.js que só
+  // injetam o HTML após hidratação. Bounded para não travar sites SSR.
+  await page
+    .waitForSelector(config.selectors.productName, { timeout: 10_000 })
+    .catch(() => {});
+  // Aguarda o preço específico quando o pixSelector está configurado —
+  // React apps (Max Titanium) hidratam cada slot separadamente.
+  if (config.pixSelector) {
+    await page
+      .waitForSelector(config.pixSelector, { timeout: 10_000 })
+      .catch(() => {});
+  }
+
   const jsonLdScripts = await page.$$eval(
     'script[type="application/ld+json"]',
     (scripts) => scripts.map((s) => s.textContent ?? "")
@@ -250,21 +270,43 @@ async function scrapePage(
     }
   }
 
+  // Tenta capturar o preço à vista/PIX quando o site publica um separado.
+  // Sites como Growth, Dark Lab, Soldiers, Masterway e Max Titanium mostram
+  // um preço de PIX menor que o preço parcelado/JSON-LD. Usamos o PIX quando
+  // for realmente menor — caso contrário o site só repete o preço padrão.
+  let cashPrice: number | null = null;
+  if (config.pixSelector) {
+    try {
+      const pixText = await page.$eval(config.pixSelector, (el) =>
+        el.textContent?.trim() ?? ""
+      );
+      const pixValue = parsePrice(pixText);
+      if (!isNaN(pixValue) && pixValue > 0 && pixValue < price) {
+        cashPrice = pixValue;
+      }
+    } catch {
+      // selector missing on this page — sem PIX separado, segue com card price
+    }
+  }
+
+  const finalPrice = cashPrice ?? price;
+
   const weightGrams = extractWeightGrams(name);
   if (!weightGrams) {
     throw new SkipProductError(`Could not extract weight from "${name}"`);
   }
 
-  if (isNaN(price) || price <= 0) {
+  if (isNaN(finalPrice) || finalPrice <= 0) {
     throw new SkipProductError(`Invalid price for "${name}"`);
   }
 
   return {
     brand,
     productName: name,
-    totalPrice: price,
+    totalPrice: finalPrice,
+    cashPrice,
     weightGrams,
-    pricePerGram: Math.round((price / weightGrams) * 1_000_000) / 1_000_000,
+    pricePerGram: Math.round((finalPrice / weightGrams) * 1_000_000) / 1_000_000,
     currency,
     inStock,
     url,
@@ -277,7 +319,15 @@ async function scrapePage(
 async function newContext(browser: Browser) {
   return browser.newContext({
     viewport: { width: 1280, height: 800 },
-    extraHTTPHeaders: { "Accept-Language": "pt-BR,pt;q=0.9" },
+    // UA realista é obrigatório — Cloudflare/Max Titanium servem challenge
+    // page quando o UA padrão do Playwright é detectado.
+    userAgent:
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    extraHTTPHeaders: {
+      "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+      Accept:
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    },
   });
 }
 

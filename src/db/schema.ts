@@ -15,6 +15,7 @@ export const products = pgTable("products", {
   brand: text("brand").notNull(),
   productName: text("product_name").notNull(),
   totalPrice: numeric("total_price", { precision: 10, scale: 2 }).notNull(),
+  cashPrice: numeric("cash_price", { precision: 10, scale: 2 }),
   weightGrams: integer("weight_grams").notNull(),
   pricePerGram: numeric("price_per_gram", { precision: 10, scale: 6 }).notNull(),
   currency: text("currency").notNull().default("BRL"),

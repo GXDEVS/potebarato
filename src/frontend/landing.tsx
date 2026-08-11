@@ -1,19 +1,62 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { createRoot } from "react-dom/client";
+import useSWR from "swr";
+
+const fetcher = <T,>(url: string): Promise<T> =>
+  fetch(url).then((r) => {
+    if (!r.ok) throw new Error(`${r.status}`);
+    return r.json() as Promise<T>;
+  });
+
+type StatsData = { total_products: number; last_update: string | null };
+
+const PAGE_SIZE = 9;
 
 interface Product {
   id: string;
   brand: string;
   productName: string;
   totalPrice: string;
+  /** PIX / à vista price when the site publishes one separately. When
+   *  set, totalPrice equals this value — cashPrice being non-null simply
+   *  means "this price requires PIX/boleto to get". */
+  cashPrice: string | null;
   weightGrams: number;
   pricePerGram: string;
   inStock: boolean;
   url: string;
   imageUrl: string | null;
+  purityLabel: string | null;
 }
 
-type SortKey = "price" | "pricePerGram" | "weight";
+type SortKey = "price" | "pricePerGram" | "weight" | "brand";
+type WeightBucket = "all" | "100" | "250" | "300" | "500" | "1000+";
+
+/** Agrupa o peso em baldes fixos que a maioria das creatinas ocupa */
+function getWeightBucket(grams: number): WeightBucket {
+  if (grams <= 120) return "100";
+  if (grams <= 275) return "250";
+  if (grams <= 400) return "300";
+  if (grams <= 800) return "500";
+  return "1000+";
+}
+
+const WEIGHT_OPTIONS: { value: WeightBucket; label: string }[] = [
+  { value: "all", label: "Todos" },
+  { value: "100", label: "100g" },
+  { value: "250", label: "250g" },
+  { value: "300", label: "300g" },
+  { value: "500", label: "500g" },
+  { value: "1000+", label: "1kg+" },
+];
+
+/** Classifica o selo de pureza em Creapure / % numérico / nenhum */
+function getPurityKind(label: string | null): "creapure" | "percent" | null {
+  if (!label) return null;
+  if (/creapure/i.test(label)) return "creapure";
+  if (/%|pura|pureza/i.test(label)) return "percent";
+  return null;
+}
 
 function ComparePanel({
   products,
@@ -73,6 +116,7 @@ function ComparePanel({
                   <span className="text-zinc-500">Preço</span>
                   <span className={`font-bold ${isMinPrice ? "text-emerald-400" : "text-white"}`}>
                     R$ {price.toFixed(2)}
+                    {p.cashPrice != null && <span className="ml-1.5 text-[10px] text-cyan-400 font-semibold">no Pix</span>}
                     {isMinPrice && products.length > 1 && <span className="ml-1.5 text-[10px] bg-emerald-500/10 px-1.5 py-0.5 rounded">menor</span>}
                   </span>
                 </div>
@@ -208,6 +252,7 @@ function HighlightCard({
             >
               {product.brand}
             </span>
+            {product.purityLabel && <PurityBadge label={product.purityLabel} />}
           </div>
 
           {/* Product name */}
@@ -230,6 +275,19 @@ function HighlightCard({
           {/* Price */}
           <div style={{ fontSize: 18, fontWeight: 700, color: priceColor }}>
             {priceDisplay}
+            {product.cashPrice != null && (
+              <span
+                style={{
+                  marginLeft: 6,
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: "#22d3ee",
+                  verticalAlign: "middle",
+                }}
+              >
+                no Pix
+              </span>
+            )}
           </div>
           <div style={{ fontSize: 11, color: "#71717a", marginTop: 1 }}>
             {subDisplay}
@@ -275,14 +333,214 @@ function HighlightCard({
   );
 }
 
+function FilterPill({
+  children,
+  active,
+  onClick,
+}: {
+  children: React.ReactNode;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${
+        active
+          ? "bg-emerald-500 border-emerald-500 text-white shadow-sm shadow-emerald-500/20"
+          : "bg-[#0a0a0a] border-[#262626] text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function PurityBadge({ label, size = "sm" }: { label: string; size?: "sm" | "md" }) {
+  const kind = getPurityKind(label);
+  if (!kind) return null;
+
+  const textSize = size === "md" ? "text-[11px]" : "text-[10px]";
+  const pad = size === "md" ? "px-2 py-0.5" : "px-1.5 py-0.5";
+
+  if (kind === "creapure") {
+    return (
+      <span
+        className={`${textSize} ${pad} rounded font-semibold inline-flex items-center gap-1 bg-cyan-500/10 border border-cyan-500/30 text-cyan-300`}
+        title="Creapure® — creatina certificada 99,99% pura (AlzChem, Alemanha)"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-2.5 h-2.5">
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
+        Creapure&reg;
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={`${textSize} ${pad} rounded font-medium bg-purple-500/10 border border-purple-500/30 text-purple-300`}
+      title={`Pureza declarada pelo fabricante: ${label}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+/** Badge de ranking — sólido, sem gradientes */
+function RankBadge({ rank }: { rank: number }) {
+  if (rank === 1) {
+    return (
+      <div
+        className="absolute top-3 left-3 z-10 w-8 h-8 rounded-md flex items-center justify-center text-xs font-bold bg-emerald-500 text-white border border-emerald-400"
+        title="1º lugar"
+      >
+        1
+      </div>
+    );
+  }
+  if (rank === 2) {
+    return (
+      <div
+        className="absolute top-3 left-3 z-10 w-8 h-8 rounded-md flex items-center justify-center text-xs font-bold bg-zinc-300 text-zinc-900 border border-zinc-400"
+        title="2º lugar"
+      >
+        2
+      </div>
+    );
+  }
+  if (rank === 3) {
+    return (
+      <div
+        className="absolute top-3 left-3 z-10 w-8 h-8 rounded-md flex items-center justify-center text-xs font-bold bg-orange-600 text-white border border-orange-500"
+        title="3º lugar"
+      >
+        3
+      </div>
+    );
+  }
+  return (
+    <div
+      className="absolute top-3 left-3 z-10 px-2 h-6 rounded-md flex items-center justify-center text-[11px] font-bold bg-[#0a0a0a] border border-[#262626] text-zinc-400"
+      title={`${rank}º lugar`}
+    >
+      #{rank}
+    </div>
+  );
+}
+
+function Pagination({
+  currentPage,
+  totalPages,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}) {
+  // Janela de páginas visíveis: primeira, última, atual +/- 1, com ellipsis
+  const pageNumbers = useMemo(() => {
+    const pages: (number | "ellipsis")[] = [];
+    const addRange = (start: number, end: number) => {
+      for (let i = start; i <= end; i++) pages.push(i);
+    };
+
+    if (totalPages <= 7) {
+      addRange(0, totalPages - 1);
+      return pages;
+    }
+
+    pages.push(0);
+    if (currentPage > 2) pages.push("ellipsis");
+
+    const start = Math.max(1, currentPage - 1);
+    const end = Math.min(totalPages - 2, currentPage + 1);
+    addRange(start, end);
+
+    if (currentPage < totalPages - 3) pages.push("ellipsis");
+    pages.push(totalPages - 1);
+
+    return pages;
+  }, [currentPage, totalPages]);
+
+  const btnBase =
+    "min-w-[36px] h-9 px-2 rounded-lg text-sm font-medium border transition flex items-center justify-center";
+
+  return (
+    <nav
+      className="mt-8 flex items-center justify-center gap-2 flex-wrap"
+      aria-label="Paginação de produtos"
+    >
+      <button
+        onClick={() => onPageChange(currentPage - 1)}
+        disabled={currentPage === 0}
+        className={`${btnBase} bg-[#141414] border-[#262626] text-zinc-300 hover:border-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-[#262626]`}
+        aria-label="Página anterior"
+      >
+        &larr;
+      </button>
+
+      {pageNumbers.map((p, idx) =>
+        p === "ellipsis" ? (
+          <span
+            key={`ellipsis-${idx}`}
+            className="min-w-[36px] h-9 flex items-center justify-center text-zinc-600 text-sm"
+            aria-hidden="true"
+          >
+            {"\u2026"}
+          </span>
+        ) : (
+          <button
+            key={p}
+            onClick={() => onPageChange(p)}
+            aria-current={p === currentPage ? "page" : undefined}
+            className={`${btnBase} ${
+              p === currentPage
+                ? "bg-emerald-500 border-emerald-500 text-white"
+                : "bg-[#141414] border-[#262626] text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+            }`}
+          >
+            {p + 1}
+          </button>
+        )
+      )}
+
+      <button
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={currentPage >= totalPages - 1}
+        className={`${btnBase} bg-[#141414] border-[#262626] text-zinc-300 hover:border-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-[#262626]`}
+        aria-label="Próxima página"
+      >
+        &rarr;
+      </button>
+    </nav>
+  );
+}
+
 function PriceComparator({ products }: { products: Product[] }) {
   const [search, setSearch] = useState("");
   const [brandFilter, setBrandFilter] = useState("all");
+  const [weightFilter, setWeightFilter] = useState<WeightBucket>("all");
   const [stockOnly, setStockOnly] = useState(false);
+  const [purityOnly, setPurityOnly] = useState(false);
+  const [creapureOnly, setCreapureOnly] = useState(false);
+  const [maxPrice, setMaxPrice] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<SortKey>("pricePerGram");
   const [compareIds, setCompareIds] = useState<Set<string>>(new Set());
   const [showCompare, setShowCompare] = useState(false);
+  const [page, setPage] = useState(0);
   const compareRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  // Range máximo de preço baseado no catálogo inteiro (não no filtrado)
+  const priceRange = useMemo(() => {
+    if (products.length === 0) return { min: 0, max: 500 };
+    const prices = products.map((p) => parseFloat(p.totalPrice));
+    return {
+      min: Math.floor(Math.min(...prices)),
+      max: Math.ceil(Math.max(...prices)),
+    };
+  }, [products]);
 
   const brands = useMemo(
     () => [...new Set(products.map((p) => p.brand))].sort(),
@@ -302,16 +560,49 @@ function PriceComparator({ products }: { products: Product[] }) {
     if (brandFilter !== "all") {
       list = list.filter((p) => p.brand === brandFilter);
     }
+    if (weightFilter !== "all") {
+      list = list.filter((p) => getWeightBucket(p.weightGrams) === weightFilter);
+    }
     if (stockOnly) {
       list = list.filter((p) => p.inStock);
+    }
+    if (purityOnly) {
+      list = list.filter((p) => getPurityKind(p.purityLabel) !== null);
+    }
+    if (creapureOnly) {
+      list = list.filter((p) => getPurityKind(p.purityLabel) === "creapure");
+    }
+    if (maxPrice !== null) {
+      list = list.filter((p) => parseFloat(p.totalPrice) <= maxPrice);
     }
     list.sort((a, b) => {
       if (sortBy === "price") return parseFloat(a.totalPrice) - parseFloat(b.totalPrice);
       if (sortBy === "pricePerGram") return parseFloat(a.pricePerGram) - parseFloat(b.pricePerGram);
+      if (sortBy === "brand") return a.brand.localeCompare(b.brand);
       return b.weightGrams - a.weightGrams;
     });
     return list;
-  }, [products, search, brandFilter, stockOnly, sortBy]);
+  }, [products, search, brandFilter, weightFilter, stockOnly, purityOnly, creapureOnly, maxPrice, sortBy]);
+
+  // Conta quantos filtros estão ativos (para mostrar no botão "Limpar")
+  const activeFilterCount =
+    (search ? 1 : 0) +
+    (brandFilter !== "all" ? 1 : 0) +
+    (weightFilter !== "all" ? 1 : 0) +
+    (stockOnly ? 1 : 0) +
+    (purityOnly ? 1 : 0) +
+    (creapureOnly ? 1 : 0) +
+    (maxPrice !== null ? 1 : 0);
+
+  function clearAllFilters() {
+    setSearch("");
+    setBrandFilter("all");
+    setWeightFilter("all");
+    setStockOnly(false);
+    setPurityOnly(false);
+    setCreapureOnly(false);
+    setMaxPrice(null);
+  }
 
   const bestByPrice = useMemo(() => {
     if (filtered.length === 0) return null;
@@ -331,6 +622,27 @@ function PriceComparator({ products }: { products: Product[] }) {
     () => products.filter((p) => compareIds.has(p.id)),
     [products, compareIds]
   );
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages - 1);
+  const paginated = useMemo(
+    () => filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE),
+    [filtered, currentPage]
+  );
+
+  // Reseta a página ao trocar filtros/ordenação
+  useEffect(() => {
+    setPage(0);
+  }, [search, brandFilter, weightFilter, stockOnly, purityOnly, creapureOnly, maxPrice, sortBy]);
+
+  function goToPage(p: number) {
+    const clamped = Math.max(0, Math.min(p, totalPages - 1));
+    setPage(clamped);
+    // Scroll suave até o topo do grid
+    setTimeout(() => {
+      gridRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 20);
+  }
 
   function toggleCompare(id: string) {
     setCompareIds((prev) => {
@@ -359,43 +671,149 @@ function PriceComparator({ products }: { products: Product[] }) {
         </p>
 
         {/* Filters */}
-        <div className="flex flex-wrap gap-3 mb-8">
-          <input
-            type="text"
-            placeholder="Buscar produto ou marca..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 min-w-[200px] bg-[#141414] border border-[#262626] rounded-lg px-4 py-2.5 text-sm text-white placeholder-zinc-500 outline-none focus:border-emerald-500/50 transition"
-          />
-          <select
-            value={brandFilter}
-            onChange={(e) => setBrandFilter(e.target.value)}
-            className="bg-[#141414] border border-[#262626] rounded-lg px-4 py-2.5 text-sm text-white outline-none focus:border-emerald-500/50 transition"
-          >
-            <option value="all">Todas as marcas</option>
-            {brands.map((b) => (
-              <option key={b} value={b}>{b}</option>
-            ))}
-          </select>
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortKey)}
-            className="bg-[#141414] border border-[#262626] rounded-lg px-4 py-2.5 text-sm text-white outline-none focus:border-emerald-500/50 transition"
-          >
-            <option value="pricePerGram">Melhor custo/g</option>
-            <option value="price">Menor preço</option>
-            <option value="weight">Maior peso</option>
-          </select>
-          <button
-            onClick={() => setStockOnly(!stockOnly)}
-            className={`px-4 py-2.5 rounded-lg text-sm font-medium border transition ${
-              stockOnly
-                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                : "bg-[#141414] border-[#262626] text-zinc-400"
-            }`}
-          >
-            Em estoque
-          </button>
+        <div className="bg-[#141414] border border-[#262626] rounded-2xl p-4 sm:p-5 mb-8 space-y-4">
+          {/* Linha 1: busca + ordenação + limpar */}
+          <div className="flex flex-wrap gap-3">
+            <div className="relative flex-1 min-w-[220px]">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Buscar produto ou marca..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full bg-[#0a0a0a] border border-[#262626] rounded-lg pl-10 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 outline-none focus:border-emerald-500/50 transition"
+              />
+            </div>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortKey)}
+              className="bg-[#0a0a0a] border border-[#262626] rounded-lg px-4 py-2.5 text-sm text-white outline-none focus:border-emerald-500/50 transition cursor-pointer"
+            >
+              <option value="pricePerGram">Melhor custo/g</option>
+              <option value="price">Menor preço</option>
+              <option value="weight">Maior peso</option>
+              <option value="brand">Marca A–Z</option>
+            </select>
+            {activeFilterCount > 0 && (
+              <button
+                onClick={clearAllFilters}
+                className="px-4 py-2.5 rounded-lg text-sm font-medium bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/15 transition flex items-center gap-2"
+                title="Limpar todos os filtros"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
+                Limpar ({activeFilterCount})
+              </button>
+            )}
+          </div>
+
+          {/* Linha 2: marcas em pills */}
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-zinc-500 font-semibold mb-2">Marca</div>
+            <div className="flex flex-wrap gap-2">
+              <FilterPill
+                active={brandFilter === "all"}
+                onClick={() => setBrandFilter("all")}
+              >
+                Todas
+              </FilterPill>
+              {brands.map((b) => (
+                <FilterPill
+                  key={b}
+                  active={brandFilter === b}
+                  onClick={() => setBrandFilter(b)}
+                >
+                  {b}
+                </FilterPill>
+              ))}
+            </div>
+          </div>
+
+          {/* Linha 3: peso em pills */}
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-zinc-500 font-semibold mb-2">Peso</div>
+            <div className="flex flex-wrap gap-2">
+              {WEIGHT_OPTIONS.map((opt) => (
+                <FilterPill
+                  key={opt.value}
+                  active={weightFilter === opt.value}
+                  onClick={() => setWeightFilter(opt.value)}
+                >
+                  {opt.label}
+                </FilterPill>
+              ))}
+            </div>
+          </div>
+
+          {/* Linha 4: toggles + slider de preço */}
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            <button
+              onClick={() => setStockOnly(!stockOnly)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition flex items-center gap-1.5 ${
+                stockOnly
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                  : "bg-[#0a0a0a] border-[#262626] text-zinc-400 hover:border-zinc-600"
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${stockOnly ? "bg-emerald-500" : "bg-zinc-600"}`} />
+              Em estoque
+            </button>
+            <button
+              onClick={() => setPurityOnly(!purityOnly)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${
+                purityOnly
+                  ? "bg-purple-500/10 border-purple-500/30 text-purple-300"
+                  : "bg-[#0a0a0a] border-[#262626] text-zinc-400 hover:border-zinc-600"
+              }`}
+            >
+              Com selo de pureza
+            </button>
+            <button
+              onClick={() => setCreapureOnly(!creapureOnly)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${
+                creapureOnly
+                  ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-300"
+                  : "bg-[#0a0a0a] border-[#262626] text-zinc-400 hover:border-zinc-600"
+              }`}
+            >
+              Só Creapure&reg;
+            </button>
+
+            <div className="flex items-center gap-3 ml-auto flex-1 min-w-[220px] max-w-[360px]">
+              <label className="text-[11px] uppercase tracking-wider text-zinc-500 font-semibold shrink-0">
+                Preço máx
+              </label>
+              <input
+                type="range"
+                min={priceRange.min}
+                max={priceRange.max}
+                step={5}
+                value={maxPrice ?? priceRange.max}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setMaxPrice(v >= priceRange.max ? null : v);
+                }}
+                className="flex-1 accent-emerald-500 cursor-pointer"
+              />
+              <span className="text-xs text-zinc-300 font-medium tabular-nums shrink-0 min-w-[52px] text-right">
+                R$ {(maxPrice ?? priceRange.max).toFixed(0)}
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* Highlights */}
@@ -444,14 +862,15 @@ function PriceComparator({ products }: { products: Product[] }) {
         </div>
 
         {/* Product cards grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((p, i) => {
+        <div ref={gridRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 scroll-mt-20">
+          {paginated.map((p, i) => {
             const price = parseFloat(p.totalPrice);
             const ppg = parseFloat(p.pricePerGram);
             const isSelected = compareIds.has(p.id);
             const isBestPrice = bestByPrice?.id === p.id;
             const isBestValue = bestByValue?.id === p.id;
-            const rank = i + 1;
+            // Rank global, respeitando a página atual
+            const rank = currentPage * PAGE_SIZE + i + 1;
 
             return (
               <div
@@ -465,17 +884,7 @@ function PriceComparator({ products }: { products: Product[] }) {
                 }`}
               >
                 {/* Rank badge */}
-                {rank <= 3 && (
-                  <div className={`absolute top-3 left-3 z-10 w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold ${
-                    rank === 1
-                      ? "bg-emerald-500 text-white"
-                      : rank === 2
-                      ? "bg-[#262626] text-zinc-300"
-                      : "bg-[#1e1e1e] text-zinc-400"
-                  }`}>
-                    {rank}
-                  </div>
-                )}
+                <RankBadge rank={rank} />
 
                 {/* Compare checkbox */}
                 <button
@@ -502,8 +911,9 @@ function PriceComparator({ products }: { products: Product[] }) {
                 {/* Body */}
                 <div className="p-4">
                   {/* Tags */}
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 mb-2 flex-wrap">
                     <span className="text-[10px] uppercase tracking-wider text-emerald-500 font-semibold">{p.brand}</span>
+                    {p.purityLabel && <PurityBadge label={p.purityLabel} />}
                     {isBestPrice && (
                       <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded-full font-medium">
                         Mais barata
@@ -519,6 +929,11 @@ function PriceComparator({ products }: { products: Product[] }) {
                         Indisponível
                       </span>
                     )}
+                    {p.cashPrice != null && (
+                      <span className="text-[10px] bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 px-1.5 py-0.5 rounded-full font-semibold tracking-wide">
+                        PIX
+                      </span>
+                    )}
                   </div>
 
                   {/* Name */}
@@ -528,7 +943,12 @@ function PriceComparator({ products }: { products: Product[] }) {
 
                   {/* Price row */}
                   <div className="flex items-baseline justify-between mb-1">
-                    <span className="text-xl font-bold text-white">R$ {price.toFixed(2)}</span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-xl font-bold text-white">R$ {price.toFixed(2)}</span>
+                      {p.cashPrice != null && (
+                        <span className="text-[10px] text-cyan-400 font-semibold">no Pix</span>
+                      )}
+                    </div>
                     <span className="text-xs text-zinc-500 bg-[#0a0a0a] px-2 py-1 rounded-md">{p.weightGrams}g</span>
                   </div>
 
@@ -564,10 +984,22 @@ function PriceComparator({ products }: { products: Product[] }) {
           </div>
         )}
 
+        {/* Paginação */}
+        {filtered.length > 0 && totalPages > 1 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={goToPage}
+          />
+        )}
+
         {/* Results count */}
         {filtered.length > 0 && (
           <div className="mt-4 text-center text-xs text-zinc-600">
-            {filtered.length} produto{filtered.length !== 1 ? "s" : ""} encontrado{filtered.length !== 1 ? "s" : ""}
+            Mostrando {currentPage * PAGE_SIZE + 1}
+            {"\u2013"}
+            {Math.min((currentPage + 1) * PAGE_SIZE, filtered.length)} de{" "}
+            {filtered.length} produto{filtered.length !== 1 ? "s" : ""}
           </div>
         )}
       </div>
@@ -617,6 +1049,7 @@ function PriceComparator({ products }: { products: Product[] }) {
 function ProductCard({ product }: { product: Product }) {
   const price = parseFloat(product.totalPrice);
   const pricePerGram = parseFloat(product.pricePerGram);
+  const hasPix = product.cashPrice != null;
 
   return (
     <a
@@ -644,6 +1077,11 @@ function ProductCard({ product }: { product: Product }) {
         <div className="marquee-card-prices">
           <span className="marquee-card-price">
             R$ {price.toFixed(2)}
+            {hasPix && (
+              <span className="ml-1.5 align-middle text-[10px] font-semibold text-cyan-400 tracking-wide">
+                PIX
+              </span>
+            )}
           </span>
           <span className="marquee-card-perg">
             R$ {pricePerGram.toFixed(4)}/g
@@ -782,31 +1220,23 @@ function StatsSkeleton() {
 }
 
 function Landing() {
-  const [stats, setStats] = useState<{
-    total_products: number;
-    last_update: string | null;
-  } | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: stats } = useSWR<StatsData>(
+    "/api/scrape/status",
+    fetcher,
+    { refreshInterval: 60_000, revalidateOnFocus: true }
+  );
+  const { data: products } = useSWR<Product[]>(
+    "/api/landing/products",
+    fetcher,
+    { refreshInterval: 60_000, revalidateOnFocus: true }
+  );
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [statsRes, productsRes] = await Promise.all([
-          fetch("/api/scrape/status"),
-          fetch("/api/landing/products"),
-        ]);
-        const [statsData, productsData] = await Promise.all([
-          statsRes.json() as Promise<{ total_products: number; last_update: string | null }>,
-          productsRes.json() as Promise<Product[]>,
-        ]);
-        setStats(statsData);
-        setProducts(productsData);
-      } catch {}
-      setLoading(false);
-    };
-    fetchData();
-  }, []);
+  const loading = products === undefined;
+  const productList = products ?? [];
+  const brandCount = useMemo(
+    () => new Set(productList.map((p) => p.brand)).size,
+    [productList]
+  );
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -865,7 +1295,7 @@ function Landing() {
                 <div className="text-xs sm:text-sm text-zinc-400">Produtos</div>
               </div>
               <div className="bg-[#141414] border border-[#262626] rounded-xl px-3 sm:px-6 py-3 sm:py-4">
-                <div className="text-xl sm:text-2xl font-bold text-emerald-500">3</div>
+                <div className="text-xl sm:text-2xl font-bold text-emerald-500">{brandCount}</div>
                 <div className="text-xs sm:text-sm text-zinc-400">Marcas</div>
               </div>
               <div className="bg-[#141414] border border-[#262626] rounded-xl px-3 sm:px-6 py-3 sm:py-4">
@@ -896,10 +1326,10 @@ function Landing() {
         <h2 className="marquee-title">
           Produtos monitorados em <span className="text-emerald-500">tempo real</span>
         </h2>
-        {loading ? <MarqueeSkeleton /> : products.length > 0 ? <Marquee products={products} /> : null}
+        {loading ? <MarqueeSkeleton /> : productList.length > 0 ? <Marquee products={productList} /> : null}
       </section>
 
-      {loading ? <ComparatorSkeleton /> : products.length > 0 ? <PriceComparator products={products} /> : null}
+      {loading ? <ComparatorSkeleton /> : productList.length > 0 ? <PriceComparator products={productList} /> : null}
 
       <section className="py-20 px-4 border-t border-[#262626]">
         <div className="max-w-4xl mx-auto">

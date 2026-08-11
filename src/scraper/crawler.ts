@@ -3,6 +3,16 @@ import type { SiteConfig } from "./types";
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+/** Corre uma promise com timeout — evita travas em teardown do Playwright */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${label}`)), ms)
+    ),
+  ]);
+}
+
 const HEADERS = { "User-Agent": "potebarato-bot/1.0" };
 const FETCH_TIMEOUT = 10_000;     // Timeout para requests de sitemap/HEAD (ms)
 const HEAD_CONCURRENCY = 10;      // Requests HEAD simultaneos para validacao
@@ -191,10 +201,11 @@ export async function discoverFromSearch(
       waitUntil: "domcontentloaded",
       timeout: 30_000,
     });
-    console.log(`[crawler:search] Page loaded (title: "${await page.title()}"), waiting 6s for JS...`);
+    const initialTitle = await page.title().catch(() => "?");
+    console.log(`[crawler:search] Page loaded (title: "${initialTitle}"), waiting 6s for JS...`);
     // Wait for Cloudflare/JS verification to resolve before scraping links
     await delay(6000);
-    console.log(`[crawler:search] Wait done (title: "${await page.title()}")`);
+    console.log(`[crawler:search] Wait done`);
 
     // Click "load more" buttons until none remain (JS-rendered pagination)
     if (loadMoreSelector) {
@@ -214,6 +225,8 @@ export async function discoverFromSearch(
       const links = await extractProductLinks(page, linkSelector, config.baseUrl);
       console.log(`[crawler:search] Extracted ${links.length} links after load-more`);
       for (const link of links) found.add(link);
+      // Navega para about:blank para matar timers/XHRs antes do teardown
+      try { await withTimeout(page.goto("about:blank"), 5000, "about:blank"); } catch {}
     } else {
       for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
         const links = await extractProductLinks(page, linkSelector, config.baseUrl);
@@ -248,9 +261,22 @@ export async function discoverFromSearch(
       }
     }
 
-    await context.close();
+    try {
+      await withTimeout(context.close(), 10_000, `context.close (${config.brand})`);
+    } catch (err) {
+      console.warn(`[crawler:search] context.close stalled for ${config.brand}:`, err);
+    }
   } finally {
-    await browser.close();
+    try {
+      await withTimeout(browser.close(), 10_000, `browser.close (${config.brand})`);
+    } catch (err) {
+      console.warn(`[crawler:search] browser.close stalled for ${config.brand}, killing process:`, err);
+      // Força kill do processo do Chromium para liberar o worker
+      try {
+        const proc = (browser as unknown as { process?: () => { kill: (sig: string) => void } | null }).process?.();
+        proc?.kill("SIGKILL");
+      } catch {}
+    }
   }
 
   console.log(
