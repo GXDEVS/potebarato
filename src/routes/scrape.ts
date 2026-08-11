@@ -51,20 +51,6 @@ app.get("/api/scrape/status", async (c) => {
   });
 });
 
-app.get("/api/landing/products/:id/history", async (c) => {
-  const productId = c.req.param("id");
-  const { getProductHistory } = await import("@/services/history");
-  const history = await getProductHistory(productId, 90);
-  c.header("Cache-Control", "public, max-age=300");
-  return c.json(
-    history.map((h) => ({
-      totalPrice: h.totalPrice,
-      pricePerGram: h.pricePerGram,
-      scrapedAt: h.scrapedAt.toISOString(),
-    }))
-  );
-});
-
 app.get("/api/landing/products", async (c) => {
   const data = await db
     .select({
